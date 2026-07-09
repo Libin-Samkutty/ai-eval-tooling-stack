@@ -26,10 +26,10 @@ spec:
               mountPath: /mlflow
           resources:
             requests:
-              memory: "256Mi"
+              memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "1Gi"
+              memory: "1536Mi"
               cpu: "500m"
           readinessProbe:
             httpGet:
