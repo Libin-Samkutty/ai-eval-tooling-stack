@@ -41,11 +41,15 @@ deploy-chatbot: ## Deploy chatbot only
 build-chatbot: ## Build chatbot Docker image
 	docker build -f Dockerfile.chatbot -t oss-ai-eval-chatbot:latest .
 
+build-eval: ## Build eval/redteam Jobs Docker image (ragas, deepeval, pyrit, garak, fairlearn, promptfoo)
+	docker build -f Dockerfile.eval -t oss-ai-eval-jobs:latest .
+
 build-mlflow: ## Build prebuilt MLflow Docker image
 	docker build -f Dockerfile.mlflow -t oss-ai-eval-mlflow:latest .
 
 load-images: ## Load local images into kind
 	kind load docker-image oss-ai-eval-chatbot:latest --name eval-stack
+	kind load docker-image oss-ai-eval-jobs:latest --name eval-stack
 	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
 
 # ── Data ───────────────────────────────────────────────

@@ -2,23 +2,15 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl nodejs npm && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install promptfoo globally
-RUN npm install -g promptfoo
-
-# Copy and install Python dependencies
+# Base deps only — the eval/redteam extras (ragas, deepeval, pyrit, garak,
+# fairlearn) pull in torch/transformers/CUDA wheels that this serving image
+# has no runtime need for. Those live in Dockerfile.eval instead.
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[all]"
+RUN pip install --no-cache-dir -e "."
 
 # Copy application code
-COPY src/ src/
-COPY scripts/ scripts/
-COPY promptfoo/ promptfoo/
-COPY data/ data/
+COPY src/chatbot/ src/chatbot/
+COPY src/__init__.py src/
 
 EXPOSE 8000
 

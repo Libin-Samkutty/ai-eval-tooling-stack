@@ -18,7 +18,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: pyrit
-          image: oss-ai-eval-chatbot:latest
+          image: oss-ai-eval-jobs:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "src.redteam.pyrit_xpia"]
           env:

@@ -18,7 +18,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: garak
-          image: oss-ai-eval-chatbot:latest
+          image: oss-ai-eval-jobs:latest
           imagePullPolicy: IfNotPresent
           command: ["python", "-m", "src.redteam.garak_probe"]
           env:
