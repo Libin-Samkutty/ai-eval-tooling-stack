@@ -19,6 +19,13 @@ spec:
         - name: mlflow
           image: oss-ai-eval-mlflow:latest
           imagePullPolicy: IfNotPresent
+          env:
+            # Disables the built-in online-scoring/trace-archival job
+            # scheduler — it activates ~40s after startup and OOMs a
+            # single-replica local server; we don't use online scoring
+            # or trace archival anyway.
+            - name: MLFLOW_SERVER_ENABLE_JOB_EXECUTION
+              value: "false"
           ports:
             - containerPort: 5000
           volumeMounts:
