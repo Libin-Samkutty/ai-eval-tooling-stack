@@ -51,6 +51,7 @@ load-images: ## Load local images into kind
 	kind load docker-image oss-ai-eval-chatbot:latest --name eval-stack
 	kind load docker-image oss-ai-eval-jobs:latest --name eval-stack
 	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
+	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
 
 # ── Data ───────────────────────────────────────────────
 

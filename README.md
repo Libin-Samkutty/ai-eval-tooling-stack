@@ -46,51 +46,101 @@ layer (Vertex AI: Gemini + Claude).
 | **Red-Teaming** | PyRIT (XPIA), Garak (direct injection) | Both cover different attack surfaces |
 | **Fairness** | Fairlearn | Batch job, documented limitations for text generation |
 | **Stats** | scipy / statsmodels | Confidence intervals across MLflow-logged runs |
-| **Orchestration** | Kubernetes (`kind`) | 3 standing Deployments, ephemeral Jobs/CronJobs |
+| **Orchestration** | Kubernetes (`kind`) | 3 standing Deployments, ephemeral Jobs/CronJobs; runs locally or in a [GitHub Codespace](#prerequisites) |
 | **CI** | GitHub Actions | Build/push images only |
+
+### Two Docker Images, Not One
+
+The chatbot Deployment and the eval/redteam Jobs use **different** images —
+sharing one bloats the always-on serving image with dependencies it never
+uses at runtime:
+
+- `Dockerfile.chatbot` → `oss-ai-eval-chatbot:latest` — base deps only. What
+  actually serves `/query`.
+- `Dockerfile.eval` → `oss-ai-eval-jobs:latest` — the `.[all]` extras
+  (ragas, deepeval, pyrit, garak, fairlearn) + promptfoo. These pull in
+  torch/transformers/CUDA wheels and easily exceed 5GB; the six manifests in
+  `k8s/jobs/` all reference this image.
+- `Dockerfile.mlflow` → `oss-ai-eval-mlflow:latest` — prebuilt so the MLflow
+  container doesn't `pip install` on every restart (slow, and pip's resolver
+  overhead on an unpinned version range was itself a source of OOMs).
 
 ## Prerequisites
 
 - **Docker** (for building images)
 - **kind** (Kubernetes in Docker — single-node local cluster)
 - **kubectl** configured to talk to your `kind` cluster
-- **Python 3.11+**
+- **Python 3.12** (all environments — local venv, CI, Codespaces — actually run
+  3.12; `>=3.11` in `pyproject.toml` is a floor, not the tested version)
 - **Vertex AI** service account JSON with `VERTEX_PROJECT_ID`
 - **LangSmith** API key (free Developer tier)
 - **DVC** installed (`pip install dvc`)
 
+> **Resource note:** the full stack (kube-system + Chroma + MLflow + chatbot)
+> needs roughly 3–4GB of headroom in whatever Docker is running in. On a
+> machine with ~8GB total RAM, Docker Desktop's default VM allocation
+> (typically ~3.8GB) is *not* enough once you add host OS + editor overhead —
+> it will OOM-crash. If your laptop is memory-constrained, prefer a
+> [GitHub Codespace](https://github.com/features/codespaces) instead of local
+> Docker Desktop: `gh codespace create --machine standardLinux32gb` (4
+> core/16GB, free-tier eligible) gives comfortable headroom and keeps your
+> local machine untouched.
+
 ## Quick Start
+
+These steps work identically locally or inside a Codespace — just run them
+wherever your Docker/kind live.
 
 ```bash
 # 1. Clone and install
-git clone <repo-url> && cd oss-ai-eval-stack
+git clone <repo-url> && cd ai-eval-tooling-stack
 pip install -e ".[dev]"
 
 # 2. Create kind cluster
 kind create cluster --name eval-stack
 kubectl cluster-info --context kind-eval-stack
 
-# 3. Set credentials
+# 3. Set credentials (or copy a filled-in .env — see .env.example)
 export VERTEX_PROJECT_ID="your-gcp-project"
 export GOOGLE_APPLICATION_CREDENTIALS="./service-account.json"
 export LANGSMITH_API_KEY="your-langsmith-key"
-export LANGSMITH_PROJECT="oss-ai-eval-stack"
 
-# 4. Deploy standing services
+# 4. Create the Secrets the manifests reference (not created automatically)
+kubectl create secret generic vertex-credentials \
+  --from-literal=project-id="$VERTEX_PROJECT_ID" \
+  --from-file=service-account.json="$GOOGLE_APPLICATION_CREDENTIALS"
+kubectl create secret generic langsmith-credentials \
+  --from-literal=api-key="$LANGSMITH_API_KEY"
+
+# 5. Build and load images into kind
+#    chatbot: lean serving image (base deps only)
+#    jobs:    heavy eval/redteam image (ragas, deepeval, pyrit, garak,
+#             fairlearn, promptfoo — pulls in torch/CUDA, ~5GB+)
+#    mlflow:  prebuilt (avoids a slow/flaky pip-install-at-container-start)
+make build-chatbot build-eval build-mlflow
+make load-images
+
+# 6. Deploy standing services — one at a time, waiting for each to be Ready
+#    (deploying all three simultaneously can spike memory past what a
+#    resource-constrained Docker VM has available)
 kubectl apply -f k8s/chroma-deployment.yaml
+kubectl rollout status deployment/chroma --timeout=90s
 kubectl apply -f k8s/mlflow-deployment.yaml
+kubectl rollout status deployment/mlflow --timeout=90s
 kubectl apply -f k8s/chatbot-deployment.yaml
+kubectl rollout status deployment/chatbot --timeout=90s
 
-# 5. Seed the vector store
+# 7. Seed the vector store (port-forward Chroma first)
+kubectl port-forward svc/chroma 8001:8001 &
 python scripts/seed_chroma.py
 
-# 6. Port-forward and test
-kubectl port-forward svc/chatbot 8000:8000
+# 8. Port-forward the chatbot and test
+kubectl port-forward svc/chatbot 8000:8000 &
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"question": "What is retrieval-augmented generation?"}'
 
-# 7. Run an eval cycle
+# 9. Run an eval cycle
 kubectl apply -f k8s/jobs/ragas-sweep.yaml
 ```
 
@@ -127,6 +177,9 @@ kubectl apply -f k8s/jobs/ragas-sweep.yaml
 ├── tests/                # Unit/integration tests
 ├── scripts/              # Utility scripts
 ├── docs/                 # Extended documentation
+├── Dockerfile.chatbot    # Lean serving image (base deps only)
+├── Dockerfile.eval       # Heavy eval/redteam Jobs image (.[all] + promptfoo)
+├── Dockerfile.mlflow     # Prebuilt MLflow image
 └── .github/workflows/    # CI pipelines
 ```
 
@@ -170,6 +223,23 @@ See [docs/api-call-budget.md](./docs/api-call-budget.md) for the full breakdown.
   signal and document the mismatch.
 - **No ingress** — Access via `kubectl port-forward` only (single local user).
 - **No Argo/Prometheus** — Dropped at this tier; overhead doesn't pay off.
+- **Kubernetes auto-injects Docker-links-style env vars per Service name** —
+  e.g. a Service named `chroma` makes every pod in the namespace see
+  `CHROMA_PORT=tcp://<clusterIP>:8001`. This collided with Chroma's own
+  `CHROMA_PORT` config key and crashed it outright. Fixed via
+  `enableServiceLinks: false` on all three Deployments; keep that in mind
+  before naming a future Service after an env var an app already reads.
+- **MLflow's built-in job scheduler must stay disabled** — MLflow 3.x's
+  online-scoring/trace-archival scheduler activates ~40s after server
+  startup and will OOM a single-replica local server regardless of memory
+  limit (we don't use online scoring or trace archival). Set via
+  `MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false` in `k8s/mlflow-deployment.yaml`
+  — don't remove it without re-verifying.
+- **Vertex AI model availability drifts** — `gemini-1.5-flash` (the original
+  default) and every `gemini-2.0-*` variant have been removed from this
+  project's model catalog as of 2026-07. Currently confirmed available:
+  `gemini-2.5-flash`, `gemini-2.5-pro`. Re-verify `GEMINI_MODEL` if `/query`
+  starts 404ing with "Publisher model ... was not found".
 
 See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 
@@ -178,10 +248,11 @@ See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 | # | Decision | Blocking |
 |---|---|---|
 | 1 | Re-check RAGAS for a release newer than 0.4.3 that fixes the broken import | Phase 4 |
-| 2 | Verify `claude-3-haiku@20240307` model string on Vertex | Phase 1 |
+| 2 | Verify `claude-3-haiku@20240307` model string on Vertex — still unverified; `/query` never exercises the Claude judge path, only Gemini | Phase 1 |
 | 3 | ~~Confirm LangChain-Vertex wrapper compatibility at RAGAS 0.3.9~~ — resolved: pin `langchain-community<0.4.2` (0.4.2 removed the `chat_models.vertexai` import RAGAS 0.3.9 uses) | Done |
 | 4 | Lock golden dataset schema before Phase 3 completes | Phase 4 |
 | 5 | Define PyRIT XPIA attack loop interface to `/query` endpoint | Phase 6 |
+| 6 | ~~Verify `gemini-1.5-flash` still resolves on Vertex~~ — resolved 2026-07: it and every `gemini-2.0-*` variant 404; switched default to `gemini-2.5-flash` (confirmed available, see Known Limitations) | Done |
 
 ## Contributing
 
