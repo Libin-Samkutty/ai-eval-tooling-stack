@@ -4,9 +4,13 @@ RUN pip install --no-cache-dir mlflow==3.14.0
 
 EXPOSE 5000
 
+# --workers 1: mlflow otherwise spawns one worker per host CPU core (ignores
+# the container's cgroup limit), multiplying memory per worker. A single
+# worker also matches the SQLite backend's single-writer design.
 CMD ["mlflow", "server", \
      "--backend-store-uri", "sqlite:////mlflow/mlflow.db", \
      "--default-artifact-root", "/mlflow/artifacts", \
      "--host", "0.0.0.0", \
      "--port", "5000", \
-     "--allowed-hosts", "*"]
+     "--allowed-hosts", "*", \
+     "--workers", "1"]
