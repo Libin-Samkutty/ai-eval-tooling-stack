@@ -12,7 +12,7 @@ class VertexConfig:
 
     project_id: str = field(default_factory=lambda: os.environ["VERTEX_PROJECT_ID"])
     gemini_model: str = field(
-        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     )
     claude_judge_model: str = field(
         default_factory=lambda: os.environ.get("CLAUDE_JUDGE_MODEL", "claude-3-5-sonnet@20240620")
