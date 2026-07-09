@@ -1,0 +1,45 @@
+# PyRIT XPIA test Job
+# ~20-30 calls per safety cycle (2 scenarios × 5 turns max)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pyrit-xpia
+  labels:
+    app: redteam
+    cycle: safety
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: redteam
+        component: pyrit
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pyrit
+          image: oss-ai-eval-chatbot:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "src.redteam.pyrit_xpia"]
+          env:
+            - name: VERTEX_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vertex-credentials
+                  key: project-id
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/service-account.json
+            - name: CHATBOT_URL
+              value: http://chatbot:8000
+            - name: CHROMA_URL
+              value: http://chroma:8001
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+          volumeMounts:
+            - name: vertex-sa
+              mountPath: /secrets
+              readOnly: true
+      volumes:
+        - name: vertex-sa
+          secret:
+            secretName: vertex-credentials

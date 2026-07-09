@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot
+  labels:
+    app: chatbot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chatbot
+  template:
+    metadata:
+      labels:
+        app: chatbot
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: chatbot
+          image: oss-ai-eval-chatbot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: VERTEX_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vertex-credentials
+                  key: project-id
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/service-account.json
+            - name: CHROMA_HOST
+              value: chroma
+            - name: CHROMA_PORT
+              value: "8001"
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: LANGSMITH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: langsmith-credentials
+                  key: api-key
+            - name: LANGSMITH_PROJECT
+              value: oss-ai-eval-stack
+            - name: LANGSMITH_TRACING
+              value: "true"
+          volumeMounts:
+            - name: vertex-sa
+              mountPath: /secrets
+              readOnly: true
+          resources:
+            requests:
+              memory: "768Mi"
+              cpu: "250m"
+            limits:
+              memory: "1536Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: vertex-sa
+          secret:
+            secretName: vertex-credentials
+            items:
+              - key: service-account.json
+                path: service-account.json
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot
+spec:
+  selector:
+    app: chatbot
+  ports:
+    - port: 8000
+      targetPort: 8000

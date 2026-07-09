@@ -1,0 +1,59 @@
+# promptfoo regression sweep Job
+# ~30 calls per quality cycle (15 tests × 2 calls each: generate + judge)
+# Logs results to MLflow via the custom Python wrapper
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: promptfoo-sweep
+  labels:
+    app: eval
+    cycle: quality
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: eval
+        component: promptfoo
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: promptfoo
+          image: oss-ai-eval-chatbot:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              npx promptfoo eval -c /config/promptfooconfig.yaml --output /output/results.json
+              python -m src.eval.mlflow_logger --promptfoo-output /output/results.json
+          env:
+            - name: VERTEX_PROJECT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vertex-credentials
+                  key: project-id
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /secrets/service-account.json
+            - name: MLFLOW_TRACKING_URI
+              value: http://mlflow:5000
+            - name: CHATBOT_URL
+              value: http://chatbot:8000
+          volumeMounts:
+            - name: vertex-sa
+              mountPath: /secrets
+              readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: output
+              mountPath: /output
+      volumes:
+        - name: vertex-sa
+          secret:
+            secretName: vertex-credentials
+        - name: config
+          configMap:
+            name: promptfoo-config
+        - name: output
+          emptyDir: {}

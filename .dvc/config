@@ -1,0 +1,16 @@
+# DVC configuration
+#
+# This project uses DVC (Data Version Control) to version:
+# - The golden dataset (data/golden_dataset.json)
+# - Chroma snapshots (for reproducibility)
+#
+# Remote: local directory (at this tier, no S3/GCS needed)
+#
+# IMPORTANT: Chroma's on-disk format (SQLite + parquet segments) is NOT
+# meaningfully diffable. DVC provides blunt-force snapshot versioning only.
+# `dvc diff` output on the vector store will NOT be useful. This is an
+# accepted limitation.
+
+[remote "local"]
+    url = .dvc/cache
+    type = local

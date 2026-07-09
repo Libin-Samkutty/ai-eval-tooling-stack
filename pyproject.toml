@@ -1,0 +1,87 @@
+[project]
+name = "oss-ai-eval-stack"
+version = "0.1.0"
+description = "Free/OSS AI evaluation and safety tooling stack with a minimal RAG chatbot"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    # Core RAG
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.9.0",
+    "instructor>=1.5.0",
+    "chromadb>=0.5.0",
+    # Vertex AI
+    "google-cloud-aiplatform>=1.70.0",
+    "langchain>=0.3.0",
+    "langchain-google-vertexai>=2.0.0",
+    # <0.4.2: that release deleted langchain_community.chat_models.vertexai,
+    # which ragas==0.3.9 imports directly (see CLAUDE.md RAGAS pin)
+    "langchain-community>=0.3.0,<0.4.2",
+    # Observability
+    "langsmith>=0.1.0",
+    # Guardrails
+    "guardrails-ai>=0.6.0",
+    # Tracking
+    "mlflow>=2.17.0",
+    "dvc>=3.55.0",
+    # Logging
+    "structlog>=24.4.0",
+    # HTTP client (for Jobs calling /query)
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+eval = [
+    # Quality eval — RAGAS pinned to 0.3.9 (see README / CLAUDE.md)
+    "ragas==0.3.9",
+    # Quality eval
+    "deepeval>=1.5.0",
+    # Statistical rigor
+    "numpy>=1.26.0",
+    "scipy>=1.14.0",
+    "statsmodels>=0.14.0",
+]
+redteam = [
+    "pyrit>=0.4.0",
+    "garak>=0.9.0",
+    "fairlearn>=0.10.0",
+]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "mypy>=1.11.0",
+    "ruff>=0.7.0",
+    "httpx>=0.27.0",
+    "pre-commit>=3.8.0",
+]
+all = [
+    "oss-ai-eval-stack[eval,redteam,dev]",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

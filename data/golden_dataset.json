@@ -1,0 +1,202 @@
+[
+  {
+    "id": "q001",
+    "question": "What is retrieval-augmented generation (RAG)?",
+    "ground_truth_contexts": [
+      "Retrieval-Augmented Generation (RAG) is a technique that combines information retrieval with text generation. It first retrieves relevant documents from a knowledge base, then uses a large language model to generate an answer grounded in those retrieved contexts.",
+      "RAG addresses the hallucination problem in LLMs by providing factual context from a curated knowledge base, allowing the model to ground its responses in verified information."
+    ],
+    "reference_answer": "RAG is a technique that combines retrieving relevant documents from a knowledge base with generating text using a large language model. It helps reduce hallucinations by grounding the model's responses in factual, retrieved context.",
+    "metadata": {"topic": "rag_basics", "difficulty": "easy"}
+  },
+  {
+    "id": "q002",
+    "question": "How do vector embeddings work in search?",
+    "ground_truth_contexts": [
+      "Vector embeddings are dense numerical representations of text that capture semantic meaning. Text is converted into high-dimensional vectors where similar concepts are close together in the vector space.",
+      "Vector similarity search works by computing cosine similarity or dot product between a query vector and stored document vectors, returning the most similar results."
+    ],
+    "reference_answer": "Vector embeddings convert text into dense numerical vectors that capture semantic meaning. Similarity search finds relevant documents by computing cosine similarity between the query vector and stored document vectors.",
+    "metadata": {"topic": "embeddings", "difficulty": "easy"}
+  },
+  {
+    "id": "q003",
+    "question": "What metrics are used to evaluate RAG systems?",
+    "ground_truth_contexts": [
+      "RAG evaluation metrics include faithfulness (whether the answer is grounded in retrieved context), answer relevancy (whether the answer addresses the question), context precision (whether retrieved context is relevant), and context recall (whether all relevant context was retrieved).",
+      "The RAGAS framework provides automated evaluation of RAG pipelines using LLM-as-judge approaches for metrics like faithfulness and answer relevancy."
+    ],
+    "reference_answer": "Key RAG evaluation metrics include faithfulness (grounding in context), answer relevancy (addresses the question), context precision (relevance of retrieved context), and context recall (completeness of retrieval). Frameworks like RAGAS automate this evaluation using LLM-as-judge.",
+    "metadata": {"topic": "evaluation", "difficulty": "medium"}
+  },
+  {
+    "id": "q004",
+    "question": "What is prompt injection?",
+    "ground_truth_contexts": [
+      "Prompt injection is an attack where a user crafts input to override or manipulate an LLM's original instructions. Direct prompt injection targets the model's system prompt, while indirect prompt injection (XPIA) plants malicious instructions in retrieved context.",
+      "XPIA (Cross-Platform Indirect Attack) is a form of prompt injection where poisoned content is stored in a knowledge base and retrieved during RAG, causing the LLM to execute hidden instructions."
+    ],
+    "reference_answer": "Prompt injection is an attack that manipulates an LLM's behavior through crafted input. Direct injection targets system prompts, while indirect injection (XPIA) plants malicious instructions in knowledge base content that gets retrieved during RAG.",
+    "metadata": {"topic": "security", "difficulty": "medium"}
+  },
+  {
+    "id": "q005",
+    "question": "How does ChromaDB store and retrieve vectors?",
+    "ground_truth_contexts": [
+      "ChromaDB is an open-source vector database that stores embeddings alongside their source documents and metadata. It supports both in-memory and persistent storage modes.",
+      "Chroma uses HNSW (Hierarchical Navigable Small World) indexing for efficient approximate nearest neighbor search. Documents, embeddings, and metadata are stored in collections."
+    ],
+    "reference_answer": "ChromaDB stores embeddings with their source documents and metadata in collections. It uses HNSW indexing for efficient approximate nearest neighbor search and supports both in-memory and persistent storage.",
+    "metadata": {"topic": "vector_store", "difficulty": "easy"}
+  },
+  {
+    "id": "q006",
+    "question": "What is MLflow experiment tracking?",
+    "ground_truth_contexts": [
+      "MLflow is an open-source platform for managing the ML lifecycle, including experiment tracking, model registry, and deployment. It logs parameters, metrics, and artifacts for reproducibility.",
+      "MLflow Tracking allows you to record and query experiments. It supports multiple backend stores including SQLite, PostgreSQL, and various cloud storage options."
+    ],
+    "reference_answer": "MLflow is an open-source platform for ML lifecycle management. Its Tracking component records parameters, metrics, and artifacts for experiment reproducibility, supporting backends like SQLite and PostgreSQL.",
+    "metadata": {"topic": "tracking", "difficulty": "easy"}
+  },
+  {
+    "id": "q007",
+    "question": "Why use separate models for generation and evaluation?",
+    "ground_truth_contexts": [
+      "Using the same model for generation and evaluation introduces self-grading bias — a model tends to rate its own outputs more favorably. Separating the generator and judge mitigates this bias.",
+      "In AI evaluation best practices, the judge model should be different from the generator to ensure independent assessment of output quality."
+    ],
+    "reference_answer": "Separate generation and evaluation models avoid self-grading bias, where a model tends to rate its own outputs more favorably. An independent judge model provides more objective quality assessment.",
+    "metadata": {"topic": "evaluation", "difficulty": "medium"}
+  },
+  {
+    "id": "q008",
+    "question": "What is query condensation in multi-turn chat?",
+    "ground_truth_contexts": [
+      "Query condensation rewrites follow-up questions into standalone questions using conversation history. This is necessary because retrieval systems need self-contained queries to find relevant documents.",
+      "In multi-turn conversations, follow-up questions like 'Can you elaborate?' are ambiguous without context. Query condensation uses an LLM to rewrite these into complete, retrievable queries."
+    ],
+    "reference_answer": "Query condensation uses an LLM to rewrite follow-up questions into standalone queries using conversation history. This is needed because retrieval systems require self-contained queries to find relevant documents.",
+    "metadata": {"topic": "rag_basics", "difficulty": "medium"}
+  },
+  {
+    "id": "q009",
+    "question": "What are AI guardrails?",
+    "ground_truth_contexts": [
+      "AI guardrails are mechanisms that validate and constrain LLM inputs and outputs to ensure safety, accuracy, and compliance. They can detect PII, toxic content, and off-topic responses.",
+      "Guardrails AI is an open-source library that provides input/output validation for LLM applications. It runs in-process and supports custom validators for specific use cases."
+    ],
+    "reference_answer": "AI guardrails validate and constrain LLM inputs and outputs for safety and compliance. Guardrails AI is an open-source library providing in-process validation with support for custom validators.",
+    "metadata": {"topic": "safety", "difficulty": "easy"}
+  },
+  {
+    "id": "q010",
+    "question": "How do you measure fairness in AI systems?",
+    "ground_truth_contexts": [
+      "Fairness in AI can be measured through demographic parity (equal positive outcomes across groups), equalized odds (equal true/false positive rates), and other statistical disparity metrics.",
+      "Fairlearn is an open-source library for assessing and mitigating fairness issues in ML models. It was designed for tabular classifiers and requires adaptation for text generation systems."
+    ],
+    "reference_answer": "AI fairness is measured through metrics like demographic parity and equalized odds. Fairlearn provides tools for assessing disparities, though it requires adaptation for text generation systems since it was built for tabular classifiers.",
+    "metadata": {"topic": "fairness", "difficulty": "hard"}
+  },
+  {
+    "id": "q011",
+    "question": "What is the role of LangSmith in observability?",
+    "ground_truth_contexts": [
+      "LangSmith is a hosted platform for LLM observability, providing trace logging, evaluation, and debugging tools. The free Developer tier offers 5,000 traces/month with 14-day retention.",
+      "LangSmith SDK allows manual instrumentation of LLM calls, providing fine-grained control over what gets traced without relying on framework auto-instrumentation."
+    ],
+    "reference_answer": "LangSmith is a hosted LLM observability platform for trace logging and debugging. Its free tier offers 5,000 traces/month with 14-day retention. The SDK supports manual instrumentation for fine-grained tracing control.",
+    "metadata": {"topic": "observability", "difficulty": "easy"}
+  },
+  {
+    "id": "q012",
+    "question": "What is DVC and how is it used for ML data versioning?",
+    "ground_truth_contexts": [
+      "DVC (Data Version Control) is an open-source tool for versioning large data files and ML models alongside code. It uses a Git-like workflow with remote storage backends.",
+      "DVC tracks data files through .dvc pointer files committed to Git. The actual data is stored in a configured remote (local, S3, GCS, etc.) and can be pulled/pushed independently."
+    ],
+    "reference_answer": "DVC is an open-source tool for versioning large data files and ML models using Git-like workflows. It stores .dvc pointer files in Git while actual data lives in a configured remote storage backend.",
+    "metadata": {"topic": "tracking", "difficulty": "easy"}
+  },
+  {
+    "id": "q013",
+    "question": "How does PyRIT help with red-teaming AI systems?",
+    "ground_truth_contexts": [
+      "PyRIT (Python Risk Identification Tool) is Microsoft's open-source framework for AI red-teaming. It provides orchestrators for multi-turn adversarial testing and includes a dedicated XPIA orchestrator.",
+      "PyRIT's XPIA orchestrator tests indirect prompt injection by planting poisoned content in a knowledge base, querying to trigger retrieval, and using a judge model to detect successful injection."
+    ],
+    "reference_answer": "PyRIT is Microsoft's open-source AI red-teaming framework with orchestrators for multi-turn adversarial testing. Its XPIA orchestrator specifically tests indirect prompt injection through knowledge base poisoning.",
+    "metadata": {"topic": "security", "difficulty": "hard"}
+  },
+  {
+    "id": "q014",
+    "question": "What is Garak and how does it probe AI systems?",
+    "ground_truth_contexts": [
+      "Garak is an open-source LLM vulnerability scanner that runs probes against language models to identify security weaknesses. It covers jailbreaks, data leakage, hallucination, and other attack categories.",
+      "Garak probes are modular tests that send crafted prompts to a model and analyze responses for vulnerabilities. Each probe targets a specific attack vector like DAN jailbreaks or toxic content generation."
+    ],
+    "reference_answer": "Garak is an open-source LLM vulnerability scanner that runs modular probes targeting specific attack vectors like jailbreaks, data leakage, and toxic content. It complements indirect injection testing by covering direct prompt attacks.",
+    "metadata": {"topic": "security", "difficulty": "medium"}
+  },
+  {
+    "id": "q015",
+    "question": "Why is statistical rigor important in AI evaluation?",
+    "ground_truth_contexts": [
+      "Raw pass rates in AI evaluation can be misleading without confidence intervals and significance testing. A 2% improvement might be noise rather than signal.",
+      "Using scipy and statsmodels, you can compute confidence intervals for eval metrics and run Welch's t-tests to determine if differences between runs are statistically significant."
+    ],
+    "reference_answer": "Statistical rigor prevents misinterpreting noise as signal in AI evaluation. Confidence intervals and significance tests (e.g., Welch's t-test via scipy/statsmodels) determine whether metric differences between runs are meaningful.",
+    "metadata": {"topic": "evaluation", "difficulty": "hard"}
+  },
+  {
+    "id": "q016",
+    "question": "How does Vertex AI support multiple model providers?",
+    "ground_truth_contexts": [
+      "Vertex AI on Google Cloud supports both Google's Gemini models and Anthropic's Claude models through a unified API. This allows using different models for different purposes within the same project.",
+      "On Vertex AI, Claude models are accessed through Model Garden with model strings like 'claude-3-5-sonnet@20240620' for Sonnet and 'claude-3-haiku@20240307' for Haiku."
+    ],
+    "reference_answer": "Vertex AI provides a unified API for both Gemini and Claude models through Model Garden. Claude models use strings like 'claude-3-5-sonnet@20240620' (Sonnet) and 'claude-3-haiku@20240307' (Haiku).",
+    "metadata": {"topic": "infrastructure", "difficulty": "medium"}
+  },
+  {
+    "id": "q017",
+    "question": "What is the difference between context precision and context recall?",
+    "ground_truth_contexts": [
+      "Context precision measures what fraction of retrieved documents are relevant to answering the question. High precision means most retrieved chunks are useful.",
+      "Context recall measures what fraction of all relevant documents were actually retrieved. High recall means few relevant documents were missed. It requires ground-truth context for evaluation."
+    ],
+    "reference_answer": "Context precision measures the fraction of retrieved documents that are relevant (quality of retrieval), while context recall measures the fraction of all relevant documents that were retrieved (completeness of retrieval). Recall requires ground-truth context.",
+    "metadata": {"topic": "evaluation", "difficulty": "medium"}
+  },
+  {
+    "id": "q018",
+    "question": "How do CronJobs work in Kubernetes for scheduled evaluations?",
+    "ground_truth_contexts": [
+      "Kubernetes CronJobs run Jobs on a schedule defined by cron expressions. They support concurrency policies like 'Forbid' to prevent overlapping runs.",
+      "For eval pipelines, CronJobs with concurrencyPolicy: Forbid prevent MLflow SQLite write contention by ensuring only one eval Job runs at a time."
+    ],
+    "reference_answer": "Kubernetes CronJobs schedule Jobs using cron expressions. The 'Forbid' concurrency policy prevents overlapping runs, which is critical for avoiding MLflow SQLite write contention in eval pipelines.",
+    "metadata": {"topic": "infrastructure", "difficulty": "medium"}
+  },
+  {
+    "id": "q019",
+    "question": "What is faithfulness in the context of RAG evaluation?",
+    "ground_truth_contexts": [
+      "Faithfulness measures whether a generated answer is grounded in the retrieved context. A faithful answer only makes claims that can be supported by the provided context.",
+      "The RAGAS framework evaluates faithfulness by having an LLM judge extract claims from the answer and verify each against the retrieved context."
+    ],
+    "reference_answer": "Faithfulness measures whether a generated answer is grounded in retrieved context — it only makes claims supported by the provided documents. RAGAS evaluates this by having an LLM verify each claim against the context.",
+    "metadata": {"topic": "evaluation", "difficulty": "medium"}
+  },
+  {
+    "id": "q020",
+    "question": "How does a kind cluster differ from a production Kubernetes cluster?",
+    "ground_truth_contexts": [
+      "kind (Kubernetes in Docker) runs a Kubernetes cluster inside Docker containers on a single machine. It's designed for local development and testing, not production use.",
+      "kind clusters have a single node, use local Docker networking, and don't support features like load balancers or persistent volume provisioners without additional configuration."
+    ],
+    "reference_answer": "kind runs Kubernetes inside Docker containers on a single machine for local development. It has a single node, uses Docker networking, and lacks production features like load balancers — making it ideal for lightweight eval stack testing.",
+    "metadata": {"topic": "infrastructure", "difficulty": "easy"}
+  }
+]

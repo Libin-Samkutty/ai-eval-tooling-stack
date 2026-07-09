@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.*
+!.env.example
+service-account.json
+credentials.json
+
+# MLflow
+mlflow.db
+mlartifacts/
+
+# Session store
+sessions.db
+
+# DVC
+data/*.dvc
+!data/.gitkeep
+
+# Chroma local data
+chroma_data/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (promptfoo)
+node_modules/
+
+# Promptfoo output
+promptfoo/output/
+promptfoo/.cache/

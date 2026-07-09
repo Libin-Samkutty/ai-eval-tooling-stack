@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          ruff check src/ tests/ scripts/
+          ruff format --check src/ tests/ scripts/
+
+      - name: Type check
+        run: |
+          mypy src/ || true  # Non-blocking until all types are resolved
+
+      - name: Test
+        run: |
+          pytest tests/ -v --tb=short
+
+  build-images:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build chatbot image
+        run: |
+          docker build -f Dockerfile.chatbot -t oss-ai-eval-chatbot:${{ github.sha }} .
+          docker tag oss-ai-eval-chatbot:${{ github.sha }} oss-ai-eval-chatbot:latest
+
+      # TODO(phase-7): Add image push to container registry
+      # - name: Push image
+      #   run: |
+      #     docker push <registry>/oss-ai-eval-chatbot:${{ github.sha }}
