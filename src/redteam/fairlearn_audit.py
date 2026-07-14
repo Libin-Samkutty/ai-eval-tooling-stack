@@ -78,7 +78,9 @@ async def run_fairness_audit(
     group_positive_rates: dict[str, list[float]] = {}
     group_counts: dict[str, int] = {}
 
-    async with httpx.AsyncClient() as client:
+    # httpx's 5s default timeout is too short for a RAG round-trip; hit
+    # httpx.ReadTimeout once during a real Codespaces run (see pyrit_xpia.py).
+    async with httpx.AsyncClient(timeout=30.0) as client:
         for item in items:
             response = await client.post(
                 f"{chatbot_url}/query",

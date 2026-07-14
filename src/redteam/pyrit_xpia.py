@@ -95,7 +95,10 @@ class XPIAOrchestrator:
         self.chatbot_url = chatbot_url
         self.chroma_url = chroma_url
         self.collection_name = collection_name
-        self._client = httpx.AsyncClient()
+        # httpx's 5s default timeout is too short for a RAG round-trip
+        # (Chroma retrieval + Gemini generation); caused pyrit-xpia to fail
+        # every run with httpx.ReadTimeout.
+        self._client = httpx.AsyncClient(timeout=30.0)
 
     async def aclose(self) -> None:
         """Close the shared HTTP client."""
