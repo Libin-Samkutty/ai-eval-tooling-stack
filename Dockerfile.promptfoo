@@ -1,0 +1,57 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+# Debian's own `nodejs`/`npm` apt packages resolve to Node 20.19, but
+# promptfoo (unpinned "latest") now hard-requires Node >=20.20 or >=22.22 at
+# runtime — `npx promptfoo --version` refuses to run on 20.19, not just a
+# warning. Install a current Node via NodeSource instead.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install promptfoo globally
+# onnxruntime-node (a promptfoo transitive dep, pulled in only sometimes —
+# `npm install -g promptfoo` has no version pin, so its dependency tree is
+# not deterministic across builds) bundles native binaries for every
+# platform/execution-provider combo (linux/darwin/win32 x cpu/cuda/
+# tensorrt/dml) when present — 513MB total, of which only linux-x64 CPU ever
+# runs here. Guarded with `-d` since the directory may simply not exist on a
+# given build. NOTE: NodeSource's nodejs installs npm's global prefix at
+# /usr/lib/node_modules, NOT /usr/local/lib/node_modules (the Debian-apt-npm
+# default) — get this path wrong and the cleanup below silently no-ops.
+# onnxruntime-web (133MB, a WASM/browser runtime) is dead weight outright —
+# nothing here runs promptfoo in a browser.
+# PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: another transitive dep (Playwright, for
+# a browser-automation provider this project never uses) otherwise downloads
+# a full headless Chromium during npm install — the thing that blew the
+# Codespace disk to 100% full on one attempt.
+RUN PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install -g promptfoo && \
+    PF_MODULES="$(npm root -g)/promptfoo/node_modules" && \
+    ORT_DIR="$PF_MODULES/onnxruntime-node/bin/napi-v6" && \
+    if [ -d "$ORT_DIR" ]; then \
+        find "$ORT_DIR" -mindepth 1 -maxdepth 1 ! -name linux -exec rm -rf {} + ; \
+        find "$ORT_DIR/linux" \( -name '*cuda*' -o -name '*tensorrt*' \) -delete ; \
+    fi && \
+    rm -rf "$PF_MODULES/onnxruntime-web" && \
+    npm cache clean --force && rm -rf /root/.npm
+    # npm's cache (~/.npm/_cacache) is never needed post-install and was
+    # observed inflating this image to 7.11GB disk usage vs 1.78GB of
+    # actual content — the single biggest remaining cause of disk-exhaustion
+    # failures once the fixes above were in place.
+
+# Base deps only — the promptfoo Job's MLflow glue (src/eval/mlflow_logger.py)
+# needs `mlflow` + `structlog`, both in the base dependency set. It does not
+# need ragas/deepeval/pyrit/garak/fairlearn (torch/transformers/CUDA, ~5GB+),
+# which is the whole point of not sharing an image with Dockerfile.eval.
+COPY pyproject.toml .
+RUN pip install --no-cache-dir -e "."
+
+# Copy application code
+COPY src/ src/
+COPY scripts/ scripts/
+COPY promptfoo/ promptfoo/
+COPY data/ data/

@@ -1,4 +1,4 @@
-.PHONY: help install dev cluster deploy seed query eval-quality eval-safety test lint clean
+.PHONY: help install dev cluster deploy seed query guard-no-cron eval-quality eval-safety eval-quality-wait eval-safety-wait test lint clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -41,8 +41,11 @@ deploy-chatbot: ## Deploy chatbot only
 build-chatbot: ## Build chatbot Docker image
 	docker build -f Dockerfile.chatbot -t oss-ai-eval-chatbot:latest .
 
-build-eval: ## Build eval/redteam Jobs Docker image (ragas, deepeval, pyrit, garak, fairlearn, promptfoo)
+build-eval: ## Build eval/redteam Jobs Docker image (ragas, deepeval, pyrit, garak, fairlearn)
 	docker build -f Dockerfile.eval -t oss-ai-eval-jobs:latest .
+
+build-promptfoo: ## Build promptfoo Jobs Docker image (separate from build-eval — see docs/known-limitations.md)
+	docker build -f Dockerfile.promptfoo -t oss-ai-eval-promptfoo:latest .
 
 build-mlflow: ## Build prebuilt MLflow Docker image
 	docker build -f Dockerfile.mlflow -t oss-ai-eval-mlflow:latest .
@@ -50,7 +53,7 @@ build-mlflow: ## Build prebuilt MLflow Docker image
 load-images: ## Load local images into kind
 	kind load docker-image oss-ai-eval-chatbot:latest --name eval-stack
 	kind load docker-image oss-ai-eval-jobs:latest --name eval-stack
-	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
+	kind load docker-image oss-ai-eval-promptfoo:latest --name eval-stack
 	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
 
 # ── Data ───────────────────────────────────────────────
@@ -79,27 +82,43 @@ query: ## Send a test query to the chatbot
 
 # ── Eval ───────────────────────────────────────────────
 
-eval-ragas: ## Run RAGAS evaluation Job
+guard-no-cron: ## Fail if any CronJob is scheduled on the cluster (Codespaces must only run Jobs on-demand)
+	@if kubectl get cronjobs -A --no-headers 2>/dev/null | grep -q .; then \
+		echo "ERROR: CronJob(s) found on the cluster. A Codespace auto-stops on idle" ; \
+		echo "regardless of internal activity, so a schedule left running here either" ; \
+		echo "never fires (machine stopped) or silently burns free hours (kept connected" ; \
+		echo "to make it fire). Remove it: kubectl delete cronjob --all -A" ; \
+		kubectl get cronjobs -A; \
+		exit 1; \
+	fi
+
+eval-ragas: guard-no-cron ## Run RAGAS evaluation Job
 	kubectl apply -f k8s/jobs/ragas-sweep.yaml
 
-eval-deepeval: ## Run DeepEval evaluation Job
+eval-deepeval: guard-no-cron ## Run DeepEval evaluation Job
 	kubectl apply -f k8s/jobs/deepeval-sweep.yaml
 
-eval-promptfoo: ## Run promptfoo regression sweep Job
+eval-promptfoo: guard-no-cron ## Run promptfoo regression sweep Job
 	kubectl apply -f k8s/jobs/promptfoo-sweep.yaml
 
 eval-quality: eval-ragas eval-promptfoo ## Run full quality cycle
 
-safety-pyrit: ## Run PyRIT XPIA Job
+eval-quality-wait: eval-quality ## Run quality cycle and block until its Jobs finish (success or failure)
+	kubectl wait --for=condition=complete --timeout=45m job/ragas-sweep job/promptfoo-sweep
+
+safety-pyrit: guard-no-cron ## Run PyRIT XPIA Job
 	kubectl apply -f k8s/jobs/pyrit-xpia.yaml
 
-safety-garak: ## Run Garak probe Job
+safety-garak: guard-no-cron ## Run Garak probe Job
 	kubectl apply -f k8s/jobs/garak-probe.yaml
 
-safety-fairlearn: ## Run Fairlearn audit Job
+safety-fairlearn: guard-no-cron ## Run Fairlearn audit Job
 	kubectl apply -f k8s/jobs/fairlearn-audit.yaml
 
 eval-safety: safety-pyrit safety-garak safety-fairlearn ## Run full safety cycle
+
+eval-safety-wait: eval-safety ## Run safety cycle and block until its Jobs finish (success or failure)
+	kubectl wait --for=condition=complete --timeout=45m job/pyrit-xpia job/garak-probe job/fairlearn-audit
 
 # ── Dev ────────────────────────────────────────────────
 

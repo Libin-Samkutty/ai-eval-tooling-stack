@@ -3,12 +3,23 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Install system dependencies
+# git: required by GitPython, which ragas/experiment.py imports at package
+# init time (ragas 0.3.9) — `import ragas` fails outright without it.
+# promptfoo/npm live in Dockerfile.promptfoo, not here — see
+# docs/known-limitations.md for why this image was split in two.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl nodejs npm && \
+    apt-get install -y --no-install-recommends git && \
     rm -rf /var/lib/apt/lists/*
 
-# Install promptfoo globally
-RUN npm install -g promptfoo
+# torch is a transitive dependency (pulled in by pyrit/deepeval/garak, not
+# listed directly in pyproject.toml) and PyPI's default torch wheel drags
+# in ~8-10GB of nvidia-cu13-* CUDA wheels this CPU-only kind cluster can
+# never use — the actual root cause of repeated "no space left on device"
+# build failures on a 32GB Codespace disk (see docs/known-limitations.md).
+# Installing the CPU-only build from PyTorch's own index first means the
+# later `.[all]` resolve finds torch already satisfies its transitive specs
+# and never reaches for the CUDA variant.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 
 # Copy and install Python dependencies (eval + redteam + dev extras)
 COPY pyproject.toml .

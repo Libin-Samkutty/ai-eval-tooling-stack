@@ -19,7 +19,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: promptfoo
-          image: oss-ai-eval-jobs:latest
+          image: oss-ai-eval-promptfoo:latest
           imagePullPolicy: IfNotPresent
           command:
             - /bin/sh

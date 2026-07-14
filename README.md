@@ -49,18 +49,28 @@ layer (Vertex AI: Gemini + Claude).
 | **Orchestration** | Kubernetes (`kind`) | 3 standing Deployments, ephemeral Jobs/CronJobs; runs locally or in a [GitHub Codespace](#prerequisites) |
 | **CI** | GitHub Actions | Build/push images only |
 
-### Two Docker Images, Not One
+### Four Docker Images, Not One
 
 The chatbot Deployment and the eval/redteam Jobs use **different** images —
 sharing one bloats the always-on serving image with dependencies it never
-uses at runtime:
+uses at runtime. The eval Jobs image and the promptfoo Job image are
+themselves split, too (see below):
 
 - `Dockerfile.chatbot` → `oss-ai-eval-chatbot:latest` — base deps only. What
   actually serves `/query`.
 - `Dockerfile.eval` → `oss-ai-eval-jobs:latest` — the `.[all]` extras
-  (ragas, deepeval, pyrit, garak, fairlearn) + promptfoo. These pull in
-  torch/transformers/CUDA wheels and easily exceed 5GB; the six manifests in
-  `k8s/jobs/` all reference this image.
+  (ragas, deepeval, pyrit, garak, fairlearn). These pull in
+  torch/transformers/CUDA wheels and easily exceed 5GB; the five
+  `ragas`/`deepeval`/`pyrit`/`garak`/`fairlearn` manifests in `k8s/jobs/`
+  reference this image.
+- `Dockerfile.promptfoo` → `oss-ai-eval-promptfoo:latest` — base deps
+  (just enough for `src/eval/mlflow_logger.py`: `mlflow` + `structlog`) plus
+  npm/promptfoo. Split out of `Dockerfile.eval` because building both in one
+  image needs their combined disk footprint available simultaneously during
+  `docker build`'s final export step, which was tipping a 32GB Codespace
+  disk over the edge — see
+  [docs/known-limitations.md](./docs/known-limitations.md#codespace-disk-space-exhaustion-during-make-build-eval).
+  Only `k8s/jobs/promptfoo-sweep.yaml` references this image.
 - `Dockerfile.mlflow` → `oss-ai-eval-mlflow:latest` — prebuilt so the MLflow
   container doesn't `pip install` on every restart (slow, and pip's resolver
   overhead on an unpinned version range was itself a source of OOMs).
@@ -105,21 +115,70 @@ export VERTEX_PROJECT_ID="your-gcp-project"
 export GOOGLE_APPLICATION_CREDENTIALS="./service-account.json"
 export LANGSMITH_API_KEY="your-langsmith-key"
 
-# 4. Create the Secrets the manifests reference (not created automatically)
+# 4. Create the Secrets AND ConfigMaps the manifests reference (none of
+#    this is created automatically). Skipping the ConfigMaps doesn't fail
+#    fast — the ragas/promptfoo Jobs' pods sit in ContainerCreating forever
+#    (`kubectl describe pod` shows `FailedMount ... configmap "X" not
+#    found`), and `kubectl wait` (what `make eval-quality-wait` uses) will
+#    happily burn its full 45m timeout waiting on a Job that was never
+#    going to finish — verified: caught this after 22 minutes of silent
+#    ContainerCreating.
 kubectl create secret generic vertex-credentials \
   --from-literal=project-id="$VERTEX_PROJECT_ID" \
   --from-file=service-account.json="$GOOGLE_APPLICATION_CREDENTIALS"
 kubectl create secret generic langsmith-credentials \
   --from-literal=api-key="$LANGSMITH_API_KEY"
+kubectl create configmap golden-dataset --from-file=data/golden_dataset.json
+kubectl create configmap promptfoo-config --from-file=promptfoo/promptfooconfig.yaml
 
 # 5. Build and load images into kind
-#    chatbot: lean serving image (base deps only)
-#    jobs:    heavy eval/redteam image (ragas, deepeval, pyrit, garak,
-#             fairlearn, promptfoo — pulls in torch/CUDA, ~5GB+)
-#    mlflow:  prebuilt (avoids a slow/flaky pip-install-at-container-start)
-make build-chatbot build-eval build-mlflow
+#    chatbot:   lean serving image (base deps only)
+#    jobs:      eval/redteam image (ragas, deepeval, pyrit, garak, fairlearn
+#               — pulls in torch/CUDA, ~5GB+; needs the `git` binary, since
+#               ragas 0.3.9 imports GitPython unconditionally at package
+#               init)
+#    promptfoo: separate, much lighter image (base deps + npm/promptfoo) —
+#               split out of `jobs` specifically to fix a Codespace disk
+#               problem, see note below
+#    mlflow:    prebuilt (avoids a slow/flaky pip-install-at-container-start)
+make build-chatbot build-eval build-promptfoo build-mlflow
 make load-images
+```
 
+> **Disk space on Codespaces**: the default Codespace disk is 32GB, and
+> building the full eval stack in one image (torch + `nvidia-cu13-*` CUDA
+> wheels + promptfoo's npm/onnxruntime deps, ~7GB+ combined) reliably
+> exhausted it — verified failure: `OSError: [Errno 28] No space left on
+> device` / `failed to extract layer ...: no space left on device`, four
+> times in a row, each on a different file, at 26–32GB/32GB used. What was
+> tried, in order:
+> - `docker builder prune -af && docker image prune -af` (host-level copies
+>   of already-`kind load`ed images are redundant) — reclaimed some space,
+>   **not enough alone**.
+> - Deleting unused preinstalled SDKs (`/usr/share/dotnet`, `sdkman`, `go`,
+>   `rvm`, `php`) — **did nothing**; they're part of the read-only base
+>   image layer and don't free real disk when removed.
+> - `kind delete cluster --name eval-stack` before building (the cluster's
+>   containerd storage volume alone holds ~6.5GB) — helped, still not
+>   enough for the combined image.
+> - Stripping promptfoo's GPU-only `onnxruntime-node` binaries (never used
+>   on this CPU-only cluster) — real savings, still not enough.
+> - **What actually fixed it**: splitting `Dockerfile.eval` into two images
+>   (`Dockerfile.eval` for the Python ML stack, `Dockerfile.promptfoo` for
+>   npm/promptfoo) so no single `docker build` ever needs both footprints
+>   in memory/disk at once.
+>
+> Also: if a build ever prints `ERROR: failed to build` / `failed to
+> extract layer` partway through, don't `docker run` the resulting image to
+> check whether it's usable anyway — that retries the broken unpack and can
+> balloon disk further (observed: one image's reported size grew from
+> 5.22GB to 16.9GB over two `docker run` invocations, and free disk hit 0).
+> Just `docker rmi -f` it and rebuild clean.
+>
+> Full details in
+> [docs/known-limitations.md](./docs/known-limitations.md#codespace-disk-space-exhaustion-during-make-build-eval).
+
+```bash
 # 6. Deploy standing services — one at a time, waiting for each to be Ready
 #    (deploying all three simultaneously can spike memory past what a
 #    resource-constrained Docker VM has available)
@@ -140,9 +199,19 @@ curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{"question": "What is retrieval-augmented generation?"}'
 
-# 9. Run an eval cycle
-kubectl apply -f k8s/jobs/ragas-sweep.yaml
+# 9. Run an eval cycle (on-demand only — see Codespaces note below)
+make eval-quality
 ```
+
+> **Codespaces**: never `kubectl apply -f k8s/cronjobs/...` — a Codespace
+> bills for wall-clock time regardless of internal activity and auto-stops
+> based on client connections, not CPU usage, so a schedule left running here
+> either silently never fires or burns the free 120 core-hours/month keeping
+> a connection open to force it to. Trigger cycles on demand instead:
+> `make eval-quality-wait` / `make eval-safety-wait` inside the Codespace, or
+> `python scripts/run_cycle_and_stop.py quality` from your local machine,
+> which also stops the Codespace the moment the cycle finishes. Details in
+> [docs/known-limitations.md](./docs/known-limitations.md#cronjobs-are-incompatible-with-codespaces).
 
 ## Project Structure
 
@@ -178,7 +247,8 @@ kubectl apply -f k8s/jobs/ragas-sweep.yaml
 ├── scripts/              # Utility scripts
 ├── docs/                 # Extended documentation
 ├── Dockerfile.chatbot    # Lean serving image (base deps only)
-├── Dockerfile.eval       # Heavy eval/redteam Jobs image (.[all] + promptfoo)
+├── Dockerfile.eval       # Heavy eval/redteam Jobs image (.[all])
+├── Dockerfile.promptfoo  # Lighter promptfoo Job image (base deps + npm)
 ├── Dockerfile.mlflow     # Prebuilt MLflow image
 └── .github/workflows/    # CI pipelines
 ```
@@ -240,6 +310,41 @@ See [docs/api-call-budget.md](./docs/api-call-budget.md) for the full breakdown.
   project's model catalog as of 2026-07. Currently confirmed available:
   `gemini-2.5-flash`, `gemini-2.5-pro`. Re-verify `GEMINI_MODEL` if `/query`
   starts 404ing with "Publisher model ... was not found".
+- **Codespace disk fills up building the eval image** — the combined
+  torch/CUDA + promptfoo/onnxruntime footprint (~7GB+) exceeded the default
+  32GB Codespace disk four separate times. Pruning docker cache/images,
+  deleting the `kind` cluster first, and stripping promptfoo's GPU-only
+  onnxruntime binaries all helped but weren't sufficient alone. The actual
+  fix: split `Dockerfile.eval` into it and a new, much lighter
+  `Dockerfile.promptfoo`, so no single build needs both footprints at once.
+  Removing unused preinstalled SDKs did nothing at all — they're part of
+  the base image's read-only layer.
+- **`Dockerfile.eval` was missing `git`** — ragas 0.3.9 imports GitPython
+  unconditionally at package init, so `import ragas` crashed in every eval
+  Job until `git` was added to the image's `apt-get install` line. Fixed.
+- **Don't `docker run` an image from a failed build** — if `docker build`
+  reports `failed to extract layer` partway through (usually a disk-space
+  symptom) but still tags an image, running it retries the broken unpack
+  and can balloon disk further instead of just failing cleanly. `docker rmi
+  -f` it and rebuild instead of probing it.
+- **The eval Job manifests need ConfigMaps nobody creates** — `golden-dataset`
+  and `promptfoo-config` (referenced by `ragas-sweep.yaml`/`deepeval-sweep.yaml`
+  and `promptfoo-sweep.yaml`) have no `kubectl create configmap` step
+  anywhere in the repo. Skip it and the Job's pod sits in `ContainerCreating`
+  forever (`FailedMount ... configmap "X" not found`) — `kubectl wait`
+  doesn't fail fast, it burns its full timeout. Added the two
+  `kubectl create configmap` commands to Quick Start step 4.
+- **`ragas_eval.py` is an unimplemented stub** — `run_ragas_eval()` never
+  calls the chatbot or RAGAS's `evaluate()`; it just builds empty results
+  (`TODO(phase-4)` in the code). The Job still reports `Complete` in <1s
+  with zero real LLM calls and zero logged metrics — don't mistake that for
+  a working quality signal.
+- **`promptfoo-sweep`'s MLflow logging is a silent no-op** — its command
+  runs `python -m src.eval.mlflow_logger --promptfoo-output ...`, but that
+  module has no CLI entrypoint at all (no `argparse`, no `__main__` guard).
+  promptfoo's own eval is real (verified: real chatbot + Claude-Haiku judge
+  calls, real pass/fail grades) but the results never reach MLflow — no
+  `promptfoo_sweep` run appears even after a successful Job.
 
 See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 
