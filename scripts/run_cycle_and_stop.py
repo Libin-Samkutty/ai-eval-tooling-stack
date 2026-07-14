@@ -62,8 +62,11 @@ def main() -> None:
     make_target = CYCLE_TARGETS[args.cycle]
 
     logger.info("cycle_start", cycle=args.cycle, codespace=name)
+    remote_command = (
+        f"cd /workspaces/ai-eval-tooling-stack && make {make_target}"
+    )
     run_result = subprocess.run(
-        ["gh", "codespace", "ssh", "-c", name, "--", f"make {make_target}"],
+        ["gh", "codespace", "ssh", "-c", name, "--", remote_command],
     )
     if run_result.returncode == 0:
         logger.info("cycle_complete", cycle=args.cycle, codespace=name)
