@@ -4,20 +4,24 @@ Alternates with RAGAS — never both in the same quality cycle.
 Both write to MLflow SQLite backend, and concurrent writes cause
 lock contention.
 
-API call volume: 20 questions x ~4 calls/question = ~80 calls per cycle.
+API call volume: with include_reason=False on all four metrics (drops the
+free-text explanation only, no accuracy cost), each metric is 1-3 calls —
+Answer Relevancy 2, Faithfulness 3, Contextual Precision 1, Hallucination 1
+= 7 judge calls + 1 /query call = 8 calls/question. 20 questions x 8 calls
+= ~160 calls per cycle — under the 200 hard cap, and DeepEval never runs
+in the same cycle as RAGAS/promptfoo (see module docstring above).
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-from pathlib import Path
 
+import httpx
 import structlog
 from pydantic import BaseModel
 
-from src.eval.ragas_eval import GoldenDatasetItem
+from src.eval.ragas_eval import load_golden_dataset
 
 logger = structlog.get_logger(__name__)
 
@@ -41,32 +45,73 @@ async def run_deepeval_eval(
     """Run DeepEval evaluation against the chatbot.
 
     For each item in the golden dataset:
-    1. Send the question to /query
-    2. Evaluate with DeepEval metrics
-
-    TODO(phase-4): Implement actual DeepEval evaluation.
-    Example structure:
-        from deepeval import evaluate
-        from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
-        from deepeval.test_case import LLMTestCase
-        from deepeval.models.llms.vertex_ai import VertexAIModel
-
-        judge = VertexAIModel(model_name="claude-3-5-sonnet@20240620")
-        test_cases = [LLMTestCase(...)]
-        evaluate(test_cases, [AnswerRelevancyMetric(model=judge), ...])
+    1. Send the question to /query, collecting the answer and retrieved
+       sources
+    2. Evaluate with DeepEval metrics, judged by Claude Haiku on Vertex AI
     """
-    data = json.loads(Path(dataset_path).read_text())
-    items = [GoldenDatasetItem(**item) for item in data[:limit]]
-    results: list[DeepEvalResult] = []
+    # Imported from its defining module, not `deepeval` or `deepeval.evaluate`
+    # directly — deepeval re-exports the `evaluate` function under the same
+    # name as the `deepeval.evaluate` submodule, which mypy resolves to the
+    # (non-callable) module rather than the function.
+    from deepeval.evaluate.evaluate import evaluate
+    from deepeval.metrics import (
+        AnswerRelevancyMetric,
+        ContextualPrecisionMetric,
+        FaithfulnessMetric,
+        HallucinationMetric,
+    )
+    from deepeval.test_case import LLMTestCase
 
-    for item in items:
-        # TODO(phase-4): Call /query endpoint and collect response
-        # TODO(phase-4): Run DeepEval metrics
-        result = DeepEvalResult(
-            question=item.question,
-            dataset_id=item.id,
+    from src.chatbot.config import load_config
+    from src.eval.vertex_claude_model import VertexClaudeModel
+
+    config = load_config()
+    items = load_golden_dataset(dataset_path, limit=limit)
+
+    judge = VertexClaudeModel(
+        model_name=config.vertex.claude_haiku_model,
+        project=config.vertex.project_id,
+        location=config.vertex.claude_location,
+    )
+
+    test_cases: list[LLMTestCase] = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for item in items:
+            response = await client.post(f"{chatbot_url}/query", json={"question": item.question})
+            response.raise_for_status()
+            data = response.json()
+            test_cases.append(
+                LLMTestCase(
+                    input=item.question,
+                    actual_output=data["answer"],
+                    expected_output=item.reference_answer,
+                    retrieval_context=data["sources"],
+                    context=item.ground_truth_contexts,
+                )
+            )
+            logger.info("deepeval_query_collected", dataset_id=item.id)
+
+    metrics = [
+        AnswerRelevancyMetric(model=judge, include_reason=False),
+        FaithfulnessMetric(model=judge, include_reason=False),
+        ContextualPrecisionMetric(model=judge, include_reason=False),
+        HallucinationMetric(model=judge, include_reason=False),
+    ]
+    eval_result = evaluate(test_cases, metrics)
+
+    results: list[DeepEvalResult] = []
+    for item, test_result in zip(items, eval_result.test_results, strict=True):
+        scores = {m.name: m.score for m in (test_result.metrics_data or [])}
+        results.append(
+            DeepEvalResult(
+                question=item.question,
+                dataset_id=item.id,
+                answer_relevancy=scores.get("Answer Relevancy"),
+                faithfulness=scores.get("Faithfulness"),
+                contextual_precision=scores.get("Contextual Precision"),
+                hallucination=scores.get("Hallucination"),
+            )
         )
-        results.append(result)
         logger.info("deepeval_item_evaluated", dataset_id=item.id)
 
     logger.info("deepeval_eval_complete", count=len(results))
@@ -74,6 +119,7 @@ async def run_deepeval_eval(
 
 
 async def _main() -> None:
+    from src.chatbot.config import load_config
     from src.eval.mlflow_logger import init_mlflow, log_deepeval_results
 
     chatbot_url = os.environ.get("CHATBOT_URL", "http://localhost:8000")
@@ -84,7 +130,10 @@ async def _main() -> None:
     results = await run_deepeval_eval(dataset_path, chatbot_url, limit=limit)
 
     init_mlflow(mlflow_uri)
-    log_deepeval_results([r.model_dump() for r in results])
+    log_deepeval_results(
+        [r.model_dump() for r in results],
+        judge_model=load_config().vertex.claude_haiku_model,
+    )
 
 
 if __name__ == "__main__":

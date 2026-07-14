@@ -22,7 +22,7 @@ providers:
 defaultTest:
   options:
     provider:
-      id: "vertex:claude-3-haiku@20240307"
+      id: "vertex:claude-haiku-4-5"
 
 tests:
   # Basic retrieval tests

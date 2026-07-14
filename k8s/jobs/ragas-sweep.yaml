@@ -1,5 +1,7 @@
 # RAGAS evaluation sweep Job
-# ~60 calls per quality cycle (20 questions × ~3 calls/question)
+# ~110 calls per quality cycle (10 questions × 11 calls/question — real
+# LLM-judged Context Precision/Faithfulness/Answer Relevancy, dataset size
+# reduced from the usual 20 to stay under the 200 hard cap alongside promptfoo)
 # NEVER run concurrently with DeepEval sweep (MLflow SQLite write contention)
 apiVersion: batch/v1
 kind: Job
@@ -37,7 +39,11 @@ spec:
             - name: GOLDEN_DATASET_PATH
               value: /data/golden_dataset.json
             - name: EVAL_DATASET_SIZE
-              value: "20"
+              value: "10"
+            - name: CLAUDE_HAIKU_MODEL
+              value: claude-haiku-4-5
+            - name: VERTEX_CLAUDE_LOCATION
+              value: us-east5
           volumeMounts:
             - name: vertex-sa
               mountPath: /secrets

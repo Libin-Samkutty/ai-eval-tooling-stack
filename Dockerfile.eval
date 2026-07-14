@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Git commit the image was built from, for MLflow run tagging (src/eval/mlflow_logger.py)
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # Install system dependencies
 # git: required by GitPython, which ragas/experiment.py imports at package
 # init time (ragas 0.3.9) — `import ragas` fails outright without it.

@@ -15,10 +15,16 @@ class VertexConfig:
         default_factory=lambda: os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
     )
     claude_judge_model: str = field(
-        default_factory=lambda: os.environ.get("CLAUDE_JUDGE_MODEL", "claude-3-5-sonnet@20240620")
+        default_factory=lambda: os.environ.get("CLAUDE_JUDGE_MODEL", "claude-sonnet-5")
     )
     claude_haiku_model: str = field(
-        default_factory=lambda: os.environ.get("CLAUDE_HAIKU_MODEL", "claude-3-haiku@20240307")
+        default_factory=lambda: os.environ.get("CLAUDE_HAIKU_MODEL", "claude-haiku-4-5")
+    )
+    # Claude Model Garden is only enabled in specific GCP regions (not
+    # necessarily the region used for Gemini) — verify against the actual
+    # project before deploying; us-east5 is a common default, not a guarantee.
+    claude_location: str = field(
+        default_factory=lambda: os.environ.get("VERTEX_CLAUDE_LOCATION", "us-east5")
     )
 
 

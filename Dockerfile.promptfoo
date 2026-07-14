@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Git commit the image was built from, for MLflow run tagging (src/eval/mlflow_logger.py)
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 # Install system dependencies
 # Debian's own `nodejs`/`npm` apt packages resolve to Node 20.19, but
 # promptfoo (unpinned "latest") now hard-requires Node >=20.20 or >=22.22 at

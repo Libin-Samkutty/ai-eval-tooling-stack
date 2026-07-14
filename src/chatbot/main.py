@@ -14,7 +14,7 @@ from src.chatbot.config import load_config
 from src.chatbot.guardrails import apply_guardrails
 from src.chatbot.rag import retrieve_and_generate
 from src.chatbot.session import SessionStore
-from src.chatbot.tracing import trace_query
+from src.chatbot.tracing import end_query_trace, start_query_trace
 
 logger = structlog.get_logger(__name__)
 
@@ -66,6 +66,7 @@ async def query(request: QueryRequest) -> QueryResponse | JSONResponse:
     multi-user features.
     """
     session_id = request.session_id or str(uuid.uuid4())
+    run_id = start_query_trace(question=request.question, session_id=session_id)
 
     try:
         # Retrieve conversation history for multi-turn
@@ -99,12 +100,11 @@ async def query(request: QueryRequest) -> QueryResponse | JSONResponse:
         session_store.add_turn(session_id, request.question, answer)
 
         # Trace to LangSmith
-        trace_query(
-            question=request.question,
+        end_query_trace(
+            run_id,
             condensed_question=condensed_question,
             answer=answer,
             sources=sources,
-            session_id=session_id,
         )
 
         logger.info(
@@ -121,6 +121,7 @@ async def query(request: QueryRequest) -> QueryResponse | JSONResponse:
             condensed_question=condensed_question,
         )
     except Exception as e:
+        end_query_trace(run_id, error=str(e))
         logger.error(
             "query_failed",
             session_id=session_id,

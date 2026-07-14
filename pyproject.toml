@@ -38,6 +38,9 @@ eval = [
     "ragas==0.3.9",
     # Quality eval
     "deepeval>=1.5.0",
+    # Claude-on-Vertex judge for RAGAS/DeepEval (ChatAnthropicVertex needs the
+    # anthropic package, pulled in via this extra — see docs/known-limitations.md)
+    "langchain-google-vertexai[anthropic]>=2.0.0",
     # Statistical rigor
     "numpy>=1.26.0",
     "scipy>=1.14.0",

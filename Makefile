@@ -42,10 +42,10 @@ build-chatbot: ## Build chatbot Docker image
 	docker build -f Dockerfile.chatbot -t oss-ai-eval-chatbot:latest .
 
 build-eval: ## Build eval/redteam Jobs Docker image (ragas, deepeval, pyrit, garak, fairlearn)
-	docker build -f Dockerfile.eval -t oss-ai-eval-jobs:latest .
+	docker build -f Dockerfile.eval --build-arg GIT_COMMIT=$$(git rev-parse --short HEAD) -t oss-ai-eval-jobs:latest .
 
 build-promptfoo: ## Build promptfoo Jobs Docker image (separate from build-eval — see docs/known-limitations.md)
-	docker build -f Dockerfile.promptfoo -t oss-ai-eval-promptfoo:latest .
+	docker build -f Dockerfile.promptfoo --build-arg GIT_COMMIT=$$(git rev-parse --short HEAD) -t oss-ai-eval-promptfoo:latest .
 
 build-mlflow: ## Build prebuilt MLflow Docker image
 	docker build -f Dockerfile.mlflow -t oss-ai-eval-mlflow:latest .

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -66,6 +66,85 @@ async def test_query_success(tmp_path, monkeypatch):
     assert body["answer"] == "Test answer"
     assert body["sources"] == ["chunk1", "chunk2"]
     assert body["session_id"]
+
+
+# ── LangSmith tracing ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_query_success_closes_langsmith_trace(tmp_path, monkeypatch):
+    """A successful query creates a run with start_time and closes it with end_time.
+
+    Regression test: the old trace_query() never set end_time/called
+    update_run, so every run stayed stuck "running" in the LangSmith UI.
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    import src.chatbot.main as main_module
+    import src.chatbot.tracing as tracing_module
+    from src.chatbot.main import app
+    from src.chatbot.session import SessionStore
+
+    monkeypatch.setattr(main_module, "session_store", SessionStore(str(tmp_path / "sessions.db")))
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    monkeypatch.setattr(tracing_module, "_LANGSMITH_AVAILABLE", True)
+
+    mock_client = MagicMock()
+    monkeypatch.setattr(tracing_module, "LangSmithClient", MagicMock(return_value=mock_client))
+
+    transport = ASGITransport(app=app)
+    with patch(
+        "src.chatbot.main.retrieve_and_generate",
+        new=AsyncMock(return_value=("Test answer", ["chunk1"])),
+    ):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/query", json={"question": "What is RAG?"})
+
+    assert response.status_code == 200
+    mock_client.create_run.assert_called_once()
+    assert "start_time" in mock_client.create_run.call_args.kwargs
+    mock_client.update_run.assert_called_once()
+    assert "end_time" in mock_client.update_run.call_args.kwargs
+    assert mock_client.update_run.call_args.kwargs["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_query_failure_still_closes_langsmith_trace(tmp_path, monkeypatch):
+    """A query that raises still closes the LangSmith run, with the error recorded.
+
+    Regression test: trace_query() used to be called only after a
+    successful response was built, so failed queries produced no trace
+    at all.
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    import src.chatbot.main as main_module
+    import src.chatbot.tracing as tracing_module
+    from src.chatbot.main import app
+    from src.chatbot.session import SessionStore
+
+    monkeypatch.setattr(main_module, "session_store", SessionStore(str(tmp_path / "sessions.db")))
+    monkeypatch.setenv("LANGSMITH_TRACING", "true")
+    monkeypatch.setenv("LANGSMITH_API_KEY", "test-key")
+    monkeypatch.setattr(tracing_module, "_LANGSMITH_AVAILABLE", True)
+
+    mock_client = MagicMock()
+    monkeypatch.setattr(tracing_module, "LangSmithClient", MagicMock(return_value=mock_client))
+
+    transport = ASGITransport(app=app)
+    with patch(
+        "src.chatbot.main.retrieve_and_generate",
+        new=AsyncMock(side_effect=RuntimeError("boom")),
+    ):
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.post("/query", json={"question": "What is RAG?"})
+
+    assert response.status_code == 500
+    mock_client.create_run.assert_called_once()
+    mock_client.update_run.assert_called_once()
+    assert mock_client.update_run.call_args.kwargs["error"] == "boom"
+    assert mock_client.update_run.call_args.kwargs["outputs"] is None
 
 
 # ── Session store ─────────────────────────────────────
