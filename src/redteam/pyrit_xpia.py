@@ -22,14 +22,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Literal
 
 import httpx
 import structlog
-from anthropic import AsyncAnthropicVertex
+from anthropic import AsyncAnthropicVertex, omit
+from anthropic.types import MessageParam
 from pydantic import BaseModel
 from pyrit.executor.workflow.xpia import XPIATestWorkflow
 from pyrit.models import Message, construct_response_from_request
-from pyrit.prompt_target import PromptTarget
+from pyrit.prompt_target import PromptTarget, TargetCapabilities, TargetConfiguration
 from pyrit.score import SelfAskTrueFalseScorer, TrueFalseQuestion
 from pyrit.setup import initialize_pyrit_async
 
@@ -179,6 +181,19 @@ class ClaudeVertexJudgeTarget(PromptTarget):
     """chat_target for SelfAskTrueFalseScorer — Claude Haiku on Vertex, kept
     separate from the Gemini generator to avoid self-grading bias."""
 
+    # SelfAskTrueFalseScorer.TARGET_REQUIREMENTS demands supports_multi_turn +
+    # supports_editable_history on its chat_target (it sets a system prompt,
+    # then sends the question as a follow-up turn); the Anthropic Messages
+    # API natively accepts a full message history per call, so this is a
+    # true native capability, not an adaptation.
+    _DEFAULT_CONFIGURATION = TargetConfiguration(
+        capabilities=TargetCapabilities(
+            supports_multi_turn=True,
+            supports_editable_history=True,
+            supports_system_prompt=True,
+        )
+    )
+
     def __init__(self, *, model_name: str, project: str, location: str) -> None:
         super().__init__(model_name=model_name)
         self._client = AsyncAnthropicVertex(project_id=project, region=location)
@@ -186,12 +201,31 @@ class ClaudeVertexJudgeTarget(PromptTarget):
     async def _send_prompt_to_target_async(
         self, *, normalized_conversation: list[Message]
     ) -> list[Message]:
+        # The scorer sets a system prompt via set_system_prompt() before sending the
+        # question — since this target declares supports_system_prompt/multi_turn/
+        # editable_history, that system message arrives here as part of
+        # normalized_conversation rather than being squashed by the pipeline, so it
+        # must be pulled out and forwarded via Claude's separate `system` param.
+        system_prompt: str | None = None
+        messages: list[MessageParam] = []
+        for msg in normalized_conversation:
+            for piece in msg.message_pieces:
+                if piece.role == "system":
+                    system_prompt = piece.converted_value
+                else:
+                    role: Literal["user", "assistant"] = (
+                        "assistant"
+                        if piece.role in ("assistant", "simulated_assistant")
+                        else "user"
+                    )
+                    messages.append({"role": role, "content": piece.converted_value})
+
         request_piece = normalized_conversation[-1].message_pieces[0]
-        prompt = request_piece.converted_value
         message = await self._client.messages.create(
             model=self._model_name,
             max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
+            system=system_prompt or omit,
+            messages=messages,
         )
         text = next(block.text for block in message.content if block.type == "text")
         return [construct_response_from_request(request=request_piece, response_text_pieces=[text])]
