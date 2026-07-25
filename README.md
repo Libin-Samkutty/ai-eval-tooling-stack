@@ -49,12 +49,12 @@ layer (Vertex AI: Gemini + Claude).
 | **Orchestration** | Kubernetes (`kind`) | 3 standing Deployments, ephemeral Jobs/CronJobs; runs locally or in a [GitHub Codespace](#prerequisites) |
 | **CI** | GitHub Actions | Build/push images only |
 
-### Four Docker Images, Not One
+### Five Docker Images, Not One
 
-The chatbot Deployment and the eval/redteam Jobs use **different** images —
-sharing one bloats the always-on serving image with dependencies it never
-uses at runtime. The eval Jobs image and the promptfoo Job image are
-themselves split, too (see below):
+The chatbot Deployment, the eval/redteam Jobs, and the CronJob orchestrator
+use **different** images — sharing one bloats the always-on serving image
+with dependencies it never uses at runtime. The eval Jobs image and the
+promptfoo Job image are themselves split, too (see below):
 
 - `Dockerfile.chatbot` → `oss-ai-eval-chatbot:latest` — base deps only. What
   actually serves `/query`.
@@ -74,6 +74,15 @@ themselves split, too (see below):
 - `Dockerfile.mlflow` → `oss-ai-eval-mlflow:latest` — prebuilt so the MLflow
   container doesn't `pip install` on every restart (slow, and pip's resolver
   overhead on an unpinned version range was itself a source of OOMs).
+- `Dockerfile.orchestrator` → `oss-ai-eval-orchestrator:latest` — a minimal
+  `python:3.11-slim` + pinned `kubectl` binary + `structlog` only (no eval
+  deps at all). Backs `k8s/cronjobs/{quality,safety}-cycle.yaml`, which now
+  run `scripts/run_{quality,safety}_cycle.py` as thin `kubectl`-based
+  orchestrators that delete-then-create the real `k8s/jobs/*.yaml` Jobs and
+  block until each completes, authorized via the narrowly-scoped
+  `k8s/rbac/eval-orchestrator-rbac.yaml` ServiceAccount/Role/RoleBinding
+  (`create/get/list/watch/delete` on `batch/jobs` only). See
+  [docs/known-limitations.md](./docs/known-limitations.md#the-cronjob-automation-path-was-entirely-dead-fixed).
 
 ## Prerequisites
 
@@ -132,16 +141,18 @@ kubectl create configmap golden-dataset --from-file=data/golden_dataset.json
 kubectl create configmap promptfoo-config --from-file=promptfoo/promptfooconfig.yaml
 
 # 5. Build and load images into kind
-#    chatbot:   lean serving image (base deps only)
-#    jobs:      eval/redteam image (ragas, deepeval, pyrit, garak, fairlearn
-#               — pulls in torch/CUDA, ~5GB+; needs the `git` binary, since
-#               ragas 0.3.9 imports GitPython unconditionally at package
-#               init)
-#    promptfoo: separate, much lighter image (base deps + npm/promptfoo) —
-#               split out of `jobs` specifically to fix a Codespace disk
-#               problem, see note below
-#    mlflow:    prebuilt (avoids a slow/flaky pip-install-at-container-start)
-make build-chatbot build-eval build-promptfoo build-mlflow
+#    chatbot:      lean serving image (base deps only)
+#    jobs:         eval/redteam image (ragas, deepeval, pyrit, garak, fairlearn
+#                  — pulls in torch/CUDA, ~5GB+; needs the `git` binary, since
+#                  ragas 0.3.9 imports GitPython unconditionally at package
+#                  init)
+#    promptfoo:    separate, much lighter image (base deps + npm/promptfoo) —
+#                  split out of `jobs` specifically to fix a Codespace disk
+#                  problem, see note below
+#    mlflow:       prebuilt (avoids a slow/flaky pip-install-at-container-start)
+#    orchestrator: minimal kubectl-only image backing the CronJob orchestrator
+#                  scripts (no eval deps)
+make build-chatbot build-eval build-promptfoo build-mlflow build-orchestrator
 make load-images
 ```
 
@@ -201,6 +212,13 @@ curl -X POST http://localhost:8000/query \
 
 # 9. Run an eval cycle (on-demand only — see Codespaces note below)
 make eval-quality
+
+# 10. (Optional) exercise the CronJob orchestrator scripts directly —
+#     this is what k8s/cronjobs/*.yaml actually run in a persistent-cluster
+#     deployment; verified safe to re-run (delete-before-create, not apply)
+kubectl apply -f k8s/rbac/eval-orchestrator-rbac.yaml
+python scripts/run_quality_cycle.py
+python scripts/run_safety_cycle.py
 ```
 
 > **Codespaces**: never `kubectl apply -f k8s/cronjobs/...` — a Codespace
@@ -231,25 +249,31 @@ make eval-quality
 │   │   ├── deepeval_eval.py
 │   │   ├── mlflow_logger.py  # promptfoo → MLflow glue
 │   │   └── stats.py          # scipy/statsmodels analysis
-│   └── redteam/          # Safety evaluation
-│       ├── pyrit_xpia.py
-│       ├── garak_probe.py
-│       └── fairlearn_audit.py
+│   ├── redteam/          # Safety evaluation
+│   │   ├── pyrit_xpia.py
+│   │   ├── garak_probe.py
+│   │   └── fairlearn_audit.py
+│   └── orchestration/    # CronJob orchestrator (kubectl-based Job runner)
+│       └── k8s_jobs.py
 ├── k8s/                  # Kubernetes manifests
 │   ├── chroma-deployment.yaml
 │   ├── chatbot-deployment.yaml
 │   ├── mlflow-deployment.yaml
 │   ├── jobs/             # Ephemeral eval Jobs
-│   └── cronjobs/         # Scheduled eval CronJobs
+│   ├── cronjobs/         # Scheduled eval CronJobs (reference only — never
+│   │                     # `kubectl apply`d inside a Codespace)
+│   └── rbac/             # ServiceAccount/Role/RoleBinding for the orchestrator
 ├── promptfoo/            # promptfoo regression test configs
 ├── data/                 # Golden dataset (DVC-tracked)
 ├── tests/                # Unit/integration tests
-├── scripts/              # Utility scripts
+├── scripts/              # Utility scripts (incl. run_quality_cycle.py,
+│                         # run_safety_cycle.py — the orchestrator entrypoints)
 ├── docs/                 # Extended documentation
-├── Dockerfile.chatbot    # Lean serving image (base deps only)
-├── Dockerfile.eval       # Heavy eval/redteam Jobs image (.[all])
-├── Dockerfile.promptfoo  # Lighter promptfoo Job image (base deps + npm)
-├── Dockerfile.mlflow     # Prebuilt MLflow image
+├── Dockerfile.chatbot      # Lean serving image (base deps only)
+├── Dockerfile.eval         # Heavy eval/redteam Jobs image (.[all])
+├── Dockerfile.promptfoo    # Lighter promptfoo Job image (base deps + npm)
+├── Dockerfile.mlflow       # Prebuilt MLflow image
+├── Dockerfile.orchestrator # Minimal kubectl-only CronJob orchestrator image
 └── .github/workflows/    # CI pipelines
 ```
 
@@ -271,8 +295,8 @@ See [PLAN.md](./PLAN.md) for full implementation details and rationale.
 
 Eval is split into two cycles on different cadences. Neither exceeds 200 calls.
 
-**Quality cycle** (daily / every commit): ~90–110 calls
-**Safety cycle** (weekly / on-demand): ~50–60 calls
+**Quality cycle** (daily / every commit): ~140 calls (RAGAS) or ~190 calls (DeepEval) — never both in the same cycle
+**Safety cycle** (weekly / on-demand): ≤50 calls (typ. ~40–44)
 
 See [docs/api-call-budget.md](./docs/api-call-budget.md) for the full breakdown.
 
@@ -334,17 +358,34 @@ See [docs/api-call-budget.md](./docs/api-call-budget.md) for the full breakdown.
   forever (`FailedMount ... configmap "X" not found`) — `kubectl wait`
   doesn't fail fast, it burns its full timeout. Added the two
   `kubectl create configmap` commands to Quick Start step 4.
-- **`ragas_eval.py` is an unimplemented stub** — `run_ragas_eval()` never
-  calls the chatbot or RAGAS's `evaluate()`; it just builds empty results
-  (`TODO(phase-4)` in the code). The Job still reports `Complete` in <1s
-  with zero real LLM calls and zero logged metrics — don't mistake that for
-  a working quality signal.
-- **`promptfoo-sweep`'s MLflow logging is a silent no-op** — its command
-  runs `python -m src.eval.mlflow_logger --promptfoo-output ...`, but that
-  module has no CLI entrypoint at all (no `argparse`, no `__main__` guard).
-  promptfoo's own eval is real (verified: real chatbot + Claude-Haiku judge
-  calls, real pass/fail grades) but the results never reach MLflow — no
-  `promptfoo_sweep` run appears even after a successful Job.
+- **Eval Job manifests also need `enableServiceLinks: false`** — all six
+  `k8s/jobs/*.yaml` manifests were missing this (the chatbot Deployment
+  already had it), so Kubernetes' auto-injected `CHROMA_PORT=tcp://...`
+  Docker-links env var collided with `AppConfig`'s own `CHROMA_PORT` field
+  and crashed every Job instantly. Fixed.
+- **RAGAS/DeepEval/promptfoo are now real, live-verified implementations** —
+  `run_ragas_eval()` calls `/query` + RAGAS's `evaluate()` per golden-dataset
+  item, DeepEval runs its full metric suite, and promptfoo's results are
+  actually logged to MLflow (`mlflow_logger.py` gained a real `main()`
+  entrypoint). All three have been run against a live cluster with real
+  Vertex AI calls; MLflow shows real `ragas_sweep`/`deepeval_sweep`/
+  `promptfoo_sweep` runs.
+- **The CronJob automation path is now real, not dead stubs** —
+  `scripts/run_quality_cycle.py`/`run_safety_cycle.py` are thin
+  `kubectl`-based orchestrators (`src/orchestration/k8s_jobs.py`) that
+  delete-then-create the real `k8s/jobs/*.yaml` Jobs and block until
+  complete; rerun-safety (deleting and recreating, not silently no-opping)
+  has been proven live by running each script twice in a row. See
+  [docs/known-limitations.md](./docs/known-limitations.md#the-cronjob-automation-path-was-entirely-dead-fixed).
+- **PyRIT XPIA, Garak, and Fairlearn are real implementations, live-verified**
+  — no longer placeholders. Getting there surfaced four real bugs, all fixed:
+  a PyRIT 1.0.0 scorer kwarg rename, a new PyRIT capability-declaration
+  requirement that (if left undeclared) would have silently dropped the
+  judge's system prompt, a `SelfAskTrueFalseScorer` constructor usage change,
+  and garak's `Probe.probe()` needing `_config.reportfile` initialized
+  manually when called via its Python API instead of its CLI. Full
+  tracebacks and fixes in
+  [docs/known-limitations.md](./docs/known-limitations.md#pyrits-orchestrator-api-was-restructured-after-pyrit06).
 
 See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 
@@ -353,11 +394,16 @@ See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 | # | Decision | Blocking |
 |---|---|---|
 | 1 | Re-check RAGAS for a release newer than 0.4.3 that fixes the broken import | Phase 4 |
-| 2 | Verify `claude-3-haiku@20240307` model string on Vertex — still unverified; `/query` never exercises the Claude judge path, only Gemini | Phase 1 |
+| 2 | ~~Verify `claude-3-haiku@20240307` model string on Vertex~~ — resolved: that model ID is retired; the judge tier now defaults to `claude-haiku-4-5` (`CLAUDE_HAIKU_MODEL` env var, `src/chatbot/config.py`), exercised live by RAGAS/DeepEval/promptfoo/PyRIT/Fairlearn judge calls | Done |
 | 3 | ~~Confirm LangChain-Vertex wrapper compatibility at RAGAS 0.3.9~~ — resolved: pin `langchain-community<0.4.2` (0.4.2 removed the `chat_models.vertexai` import RAGAS 0.3.9 uses) | Done |
-| 4 | Lock golden dataset schema before Phase 3 completes | Phase 4 |
-| 5 | Define PyRIT XPIA attack loop interface to `/query` endpoint | Phase 6 |
+| 4 | ~~Lock golden dataset schema before Phase 3 completes~~ — resolved: schema locked, see `data/golden_dataset.json` and the schema block in `PLAN.md`/`CLAUDE.md` | Done |
+| 5 | ~~Define PyRIT XPIA attack loop interface to `/query` endpoint~~ — resolved: `ChatbotQueryTarget`/`ChromaPlantTarget` (real `PromptTarget` subclasses) in `src/redteam/pyrit_xpia.py`, driven by `pyrit.executor.workflow.xpia.XPIATestWorkflow` | Done |
 | 6 | ~~Verify `gemini-1.5-flash` still resolves on Vertex~~ — resolved 2026-07: it and every `gemini-2.0-*` variant 404; switched default to `gemini-2.5-flash` (confirmed available, see Known Limitations) | Done |
+
+`.env.example` and `data/golden_dataset.json` still show the retired
+`claude-3-haiku@20240307` string in example/sample content only — the actual
+default (`src/chatbot/config.py`) and every `k8s/jobs/*.yaml` manifest use
+`claude-haiku-4-5`.
 
 ## Contributing
 
