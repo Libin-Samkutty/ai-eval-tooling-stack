@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 import chromadb
 import structlog
 from google.cloud import aiplatform
@@ -28,7 +30,7 @@ class GeneratedAnswer(BaseModel):
 # ── Chroma retrieval ───────────────────────────────────
 
 
-def _get_chroma_client(config: AppConfig) -> chromadb.HttpClient:
+def _get_chroma_client(config: AppConfig) -> chromadb.api.ClientAPI:
     """Create an HTTP client to the Chroma vector store."""
     return chromadb.HttpClient(host=config.chroma.host, port=config.chroma.port)
 
@@ -83,7 +85,7 @@ Do not make up information beyond what is in the context.
 
     model = _get_gemini_model(config)
     response = await model.ainvoke(prompt)
-    answer = response.content
+    answer = cast(str, response.content)
 
     logger.info("generation_complete", question=question[:60], answer_length=len(answer))
     return answer

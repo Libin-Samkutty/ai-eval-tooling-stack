@@ -33,10 +33,10 @@ def init_mlflow(tracking_uri: str, experiment_name: str = "oss-ai-eval-stack") -
     logger.info("mlflow_initialized", tracking_uri=tracking_uri, experiment=experiment_name)
 
 
-def _tag_common(framework: str, judge_model: str | None) -> None:
-    """Set the tags shared by all three log_*_results functions."""
+def _tag_common(framework: str, judge_model: str | None, cycle_type: str = "quality") -> None:
+    """Set the tags shared by all log_*_results functions."""
     mlflow.set_tag("framework", framework)
-    mlflow.set_tag("cycle_type", "quality")
+    mlflow.set_tag("cycle_type", cycle_type)
     mlflow.set_tag("git_commit", os.environ.get("GIT_COMMIT", "unknown"))
     if judge_model:
         mlflow.log_param("judge_model", judge_model)
@@ -69,7 +69,7 @@ def log_ragas_results(
                 mlflow.log_metric(f"ragas_{key}_count", len(values))
 
         # Log raw results as artifact
-        mlflow.log_dict(results, "ragas_results.json")
+        mlflow.log_dict({"results": results}, "ragas_results.json")
         logger.info("ragas_logged_to_mlflow", run_name=run_name, result_count=len(results))
 
 
@@ -103,7 +103,7 @@ def log_deepeval_results(
                 mlflow.log_metric(f"deepeval_{key}_mean", avg)
                 mlflow.log_metric(f"deepeval_{key}_count", len(values))
 
-        mlflow.log_dict(results, "deepeval_results.json")
+        mlflow.log_dict({"results": results}, "deepeval_results.json")
         logger.info("deepeval_logged_to_mlflow", run_name=run_name, result_count=len(results))
 
 
@@ -147,6 +147,83 @@ def log_promptfoo_results(
         # Log raw output as artifact
         mlflow.log_artifact(output_path, "promptfoo")
         logger.info("promptfoo_logged_to_mlflow", run_name=run_name)
+
+
+def log_pyrit_results(
+    results: list[dict[str, Any]],
+    run_name: str = "pyrit_xpia_sweep",
+    judge_model: str | None = None,
+) -> None:
+    """Log PyRIT XPIA results to MLflow.
+
+    Args:
+        results: List of per-turn XPIAResult dicts.
+        run_name: Name for the MLflow run.
+        judge_model: The Claude model used as the XPIA scorer's judge target.
+    """
+    with mlflow.start_run(run_name=run_name):
+        _tag_common("pyrit", judge_model, cycle_type="safety")
+        mlflow.log_param("turns_run", len(results))
+
+        detected = sum(1 for r in results if r.get("injection_detected"))
+        mlflow.log_metric("pyrit_injections_detected", detected)
+        mlflow.log_metric("pyrit_turns_run", len(results))
+
+        mlflow.log_dict({"results": results}, "pyrit_xpia_results.json")
+        logger.info("pyrit_logged_to_mlflow", run_name=run_name, result_count=len(results))
+
+
+def log_garak_results(
+    results: list[dict[str, Any]],
+    run_name: str = "garak_probe_sweep",
+) -> None:
+    """Log Garak probe results to MLflow.
+
+    Args:
+        results: List of per-probe GarakProbeResult dicts.
+        run_name: Name for the MLflow run.
+    """
+    with mlflow.start_run(run_name=run_name):
+        _tag_common("garak", judge_model=None, cycle_type="safety")
+        mlflow.log_param("probes_run", len(results))
+
+        passed = sum(1 for r in results if r.get("passed"))
+        mlflow.log_metric("garak_pass_rate", passed / len(results) if results else 0.0)
+        mlflow.log_metric("garak_probes_run", len(results))
+
+        mlflow.log_dict({"results": results}, "garak_results.json")
+        logger.info("garak_logged_to_mlflow", run_name=run_name, result_count=len(results))
+
+
+def log_fairlearn_results(
+    result: dict[str, Any],
+    run_name: str = "fairlearn_audit_sweep",
+    judge_model: str | None = None,
+) -> None:
+    """Log a Fairlearn fairness audit result to MLflow.
+
+    Args:
+        result: FairnessAuditResult dict.
+        run_name: Name for the MLflow run.
+        judge_model: The Claude model used to classify chatbot answers.
+    """
+    with mlflow.start_run(run_name=run_name):
+        _tag_common("fairlearn", judge_model, cycle_type="safety")
+        mlflow.log_param("items_audited", result.get("items_audited", 0))
+
+        dp_diff = result.get("demographic_parity_difference")
+        if dp_diff is not None:
+            mlflow.log_metric("fairlearn_demographic_parity_difference", dp_diff)
+
+        eo_diff = result.get("equalized_odds_difference")
+        if eo_diff is not None:
+            mlflow.log_metric("fairlearn_equalized_odds_difference", eo_diff)
+
+        for group, rate in result.get("group_positive_rates", {}).items():
+            mlflow.log_metric(f"fairlearn_group_{group}_positive_rate", rate)
+
+        mlflow.log_dict(result, "fairlearn_results.json")
+        logger.info("fairlearn_logged_to_mlflow", run_name=run_name)
 
 
 def main() -> None:

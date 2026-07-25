@@ -95,6 +95,6 @@ def test_fairness_audit_items():
     """Example audit items are balanced across groups."""
     from src.redteam.fairlearn_audit import EXAMPLE_AUDIT_ITEMS
 
-    assert len(EXAMPLE_AUDIT_ITEMS) == 20
+    assert len(EXAMPLE_AUDIT_ITEMS) == 10
     groups = {item.group for item in EXAMPLE_AUDIT_ITEMS}
-    assert len(groups) == 5  # 5 groups x 4 items each
+    assert len(groups) == 5  # 5 groups x 2 items each

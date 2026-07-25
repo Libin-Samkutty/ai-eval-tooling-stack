@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Pinned kubectl — this image's only job is `kubectl delete/create/wait`
+# against the existing k8s/jobs/*.yaml manifests (see src/orchestration/
+# k8s_jobs.py). Pinned explicitly rather than "latest" — see
+# Dockerfile.promptfoo's Node install for why an unpinned binary version is
+# a problem that already bit this project once.
+ARG KUBECTL_VERSION=v1.31.4
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    curl -fsSLo /usr/local/bin/kubectl \
+        "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" && \
+    chmod +x /usr/local/bin/kubectl && \
+    apt-get purge -y curl && apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# The orchestrator never calls Vertex AI/Chroma/MLflow itself, so it needs
+# neither the base dependency set (fastapi/chromadb/langchain/mlflow/dvc)
+# nor the eval/redteam extras — only structlog for logging, plus the project
+# installed with --no-deps so `src.orchestration.k8s_jobs` is importable.
+COPY pyproject.toml .
+COPY src/__init__.py src/
+COPY src/orchestration/ src/orchestration/
+RUN pip install --no-cache-dir --no-deps -e "." && \
+    pip install --no-cache-dir structlog
+
+COPY scripts/run_quality_cycle.py scripts/run_safety_cycle.py scripts/
+COPY k8s/jobs/ k8s/jobs/

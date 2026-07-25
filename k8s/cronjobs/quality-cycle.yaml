@@ -21,37 +21,14 @@ spec:
             app: eval
             cycle: quality
         spec:
+          serviceAccountName: eval-orchestrator
           restartPolicy: Never
           containers:
             - name: quality-eval
-              image: oss-ai-eval-chatbot:latest
+              image: oss-ai-eval-orchestrator:latest
               imagePullPolicy: IfNotPresent
               command: ["python", "scripts/run_quality_cycle.py"]
-              env:
-                - name: VERTEX_PROJECT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: vertex-credentials
-                      key: project-id
-                - name: GOOGLE_APPLICATION_CREDENTIALS
-                  value: /secrets/service-account.json
-                - name: CHATBOT_URL
-                  value: http://chatbot:8000
-                - name: MLFLOW_TRACKING_URI
-                  value: http://mlflow:5000
-                - name: GOLDEN_DATASET_PATH
-                  value: /data/golden_dataset.json
-              volumeMounts:
-                - name: vertex-sa
-                  mountPath: /secrets
-                  readOnly: true
-                - name: data
-                  mountPath: /data
-                  readOnly: true
-          volumes:
-            - name: vertex-sa
-              secret:
-                secretName: vertex-credentials
-            - name: data
-              configMap:
-                name: golden-dataset
+              # No Vertex/Chroma/MLflow env or volumes here — this container
+              # only shells out to kubectl (src/orchestration/k8s_jobs.py);
+              # the actual eval Jobs it creates (k8s/jobs/*.yaml) declare
+              # those themselves.

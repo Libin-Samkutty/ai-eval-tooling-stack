@@ -50,11 +50,15 @@ build-promptfoo: ## Build promptfoo Jobs Docker image (separate from build-eval 
 build-mlflow: ## Build prebuilt MLflow Docker image
 	docker build -f Dockerfile.mlflow -t oss-ai-eval-mlflow:latest .
 
+build-orchestrator: ## Build the minimal CronJob orchestrator image (kubectl only, no eval deps)
+	docker build -f Dockerfile.orchestrator -t oss-ai-eval-orchestrator:latest .
+
 load-images: ## Load local images into kind
 	kind load docker-image oss-ai-eval-chatbot:latest --name eval-stack
 	kind load docker-image oss-ai-eval-jobs:latest --name eval-stack
 	kind load docker-image oss-ai-eval-promptfoo:latest --name eval-stack
 	kind load docker-image oss-ai-eval-mlflow:latest --name eval-stack
+	kind load docker-image oss-ai-eval-orchestrator:latest --name eval-stack
 
 # ── Data ───────────────────────────────────────────────
 

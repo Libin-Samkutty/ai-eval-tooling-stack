@@ -21,31 +21,14 @@ spec:
             app: redteam
             cycle: safety
         spec:
+          serviceAccountName: eval-orchestrator
           restartPolicy: Never
           containers:
             - name: safety-eval
-              image: oss-ai-eval-chatbot:latest
+              image: oss-ai-eval-orchestrator:latest
               imagePullPolicy: IfNotPresent
               command: ["python", "scripts/run_safety_cycle.py"]
-              env:
-                - name: VERTEX_PROJECT_ID
-                  valueFrom:
-                    secretKeyRef:
-                      name: vertex-credentials
-                      key: project-id
-                - name: GOOGLE_APPLICATION_CREDENTIALS
-                  value: /secrets/service-account.json
-                - name: CHATBOT_URL
-                  value: http://chatbot:8000
-                - name: CHROMA_URL
-                  value: http://chroma:8001
-                - name: MLFLOW_TRACKING_URI
-                  value: http://mlflow:5000
-              volumeMounts:
-                - name: vertex-sa
-                  mountPath: /secrets
-                  readOnly: true
-          volumes:
-            - name: vertex-sa
-              secret:
-                secretName: vertex-credentials
+              # No Vertex/Chroma/MLflow env or volumes here — this container
+              # only shells out to kubectl (src/orchestration/k8s_jobs.py);
+              # the actual redteam Jobs it creates (k8s/jobs/*.yaml) declare
+              # those themselves.

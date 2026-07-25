@@ -7,6 +7,8 @@ conversation history. This adds one LLM call per non-first turn.
 
 from __future__ import annotations
 
+from typing import cast
+
 import structlog
 from langchain_google_vertexai import ChatVertexAI
 
@@ -62,7 +64,7 @@ async def condense_query(
 
     model = _get_condense_model(config)
     response = await model.ainvoke(prompt)
-    condensed = response.content.strip()
+    condensed = cast(str, response.content).strip()
 
     logger.info(
         "query_condensed",

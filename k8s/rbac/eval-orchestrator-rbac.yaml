@@ -1,0 +1,33 @@
+# ServiceAccount + Role + RoleBinding for the quality/safety CronJob
+# orchestrator (src/orchestration/k8s_jobs.py) — grants only what
+# `kubectl delete/create/wait` against k8s/jobs/*.yaml Jobs needs, nothing
+# else. Applying this file does NOT create a CronJob and is unaffected by
+# `make guard-no-cron`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: eval-orchestrator
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: eval-orchestrator-role
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: eval-orchestrator-binding
+subjects:
+  - kind: ServiceAccount
+    name: eval-orchestrator
+roleRef:
+  kind: Role
+  name: eval-orchestrator-role
+  apiGroup: rbac.authorization.k8s.io
