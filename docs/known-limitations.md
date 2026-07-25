@@ -685,3 +685,27 @@ items were logged to MLflow. No code change. If this recurs frequently
 (rather than as a one-off), consider raising the httpx timeout further or
 adding an explicit retry-with-backoff inside `deepeval_eval.py` itself rather
 than relying solely on the Job restart.
+
+---
+
+## `garak` and `ragas`/`pyrit` Fight Over `datasets`' Version
+
+**Severity**: Build-breaking (CI/`Dockerfile.eval` `.[all]` install)
+**Component**: `pyproject.toml`'s `redteam` extra
+
+`garak>=0.13.0` pins `datasets<4.0`, while `ragas==0.3.9` requires
+`datasets>=4.0.0` and `pyrit` requires `datasets>=4.8.0`. With all three
+installed together (`.[all]`, exactly what CI's "Install dependencies" step
+and `Dockerfile.eval` both do), pip's resolver can't satisfy both bounds and
+backtracks through the entire `alembic`/`Mako` chain looking for a
+combination that works. It eventually tries `Mako` releases old enough to
+carry a `use_2to3` setup command, which fails to build under any setuptools
+new enough to run on Python 3.11 (`error in Mako setup command: use_2to3 is
+invalid`) — a `Mako` build failure is the visible symptom, but the real
+cause is upstream in the `garak`/`ragas`/`pyrit` `datasets` conflict.
+
+**Mitigation**: pinned `garak>=0.9.0,<0.13.0` in `pyproject.toml`. Versions
+0.9.0 through 0.12.x all declare `datasets>=X` with no upper bound, so they
+resolve cleanly alongside `ragas`'s and `pyrit`'s floors. If `garak` is ever
+upgraded past 0.13.0, re-check its `datasets` pin against whatever `ragas`/
+`pyrit` require at that time before lifting this ceiling.
