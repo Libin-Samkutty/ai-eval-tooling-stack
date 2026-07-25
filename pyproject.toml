@@ -17,7 +17,7 @@ dependencies = [
     "langchain>=0.3.0",
     "langchain-google-vertexai>=2.0.0",
     # <0.4.2: that release deleted langchain_community.chat_models.vertexai,
-    # which ragas==0.3.9 imports directly (see CLAUDE.md RAGAS pin)
+    # which ragas==0.3.9 imports directly (see docs/known-limitations.md)
     "langchain-community>=0.3.0,<0.4.2",
     # Observability
     "langsmith>=0.1.0",
@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 eval = [
-    # Quality eval — RAGAS pinned to 0.3.9 (see README / CLAUDE.md)
+    # Quality eval — RAGAS pinned to 0.3.9 (see README)
     "ragas==0.3.9",
     # Quality eval
     "deepeval>=1.5.0",

@@ -396,7 +396,7 @@ See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 | 1 | Re-check RAGAS for a release newer than 0.4.3 that fixes the broken import | Phase 4 |
 | 2 | ~~Verify `claude-3-haiku@20240307` model string on Vertex~~ — resolved: that model ID is retired; the judge tier now defaults to `claude-haiku-4-5` (`CLAUDE_HAIKU_MODEL` env var, `src/chatbot/config.py`), exercised live by RAGAS/DeepEval/promptfoo/PyRIT/Fairlearn judge calls | Done |
 | 3 | ~~Confirm LangChain-Vertex wrapper compatibility at RAGAS 0.3.9~~ — resolved: pin `langchain-community<0.4.2` (0.4.2 removed the `chat_models.vertexai` import RAGAS 0.3.9 uses) | Done |
-| 4 | ~~Lock golden dataset schema before Phase 3 completes~~ — resolved: schema locked, see `data/golden_dataset.json` and the schema block in `PLAN.md`/`CLAUDE.md` | Done |
+| 4 | ~~Lock golden dataset schema before Phase 3 completes~~ — resolved: schema locked, see `data/golden_dataset.json` | Done |
 | 5 | ~~Define PyRIT XPIA attack loop interface to `/query` endpoint~~ — resolved: `ChatbotQueryTarget`/`ChromaPlantTarget` (real `PromptTarget` subclasses) in `src/redteam/pyrit_xpia.py`, driven by `pyrit.executor.workflow.xpia.XPIATestWorkflow` | Done |
 | 6 | ~~Verify `gemini-1.5-flash` still resolves on Vertex~~ — resolved 2026-07: it and every `gemini-2.0-*` variant 404; switched default to `gemini-2.5-flash` (confirmed available, see Known Limitations) | Done |
 | 7 | ~~CI's "build/push images" scope~~ — resolved: build-only, no registry push (nothing in the project ever pulls from one — Jobs/Deployments load images via `kind load docker-image`); `mypy` is now a blocking CI step since `src/` is clean | Done |
