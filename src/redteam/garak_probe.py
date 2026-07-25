@@ -35,6 +35,7 @@ from typing import Any
 
 import httpx
 import structlog
+from garak import _config
 from garak._plugins import load_plugin
 from garak.generators.base import Generator
 from pydantic import BaseModel
@@ -146,13 +147,21 @@ async def run_garak_probes(
     generator = ChatbotGarakGenerator(target_endpoint, generations=1)
     rng = random.Random(42)  # reproducible sampling across runs
 
+    # Probe.probe() writes each attempt to _config.reportfile — normally opened
+    # by garak's own CLI (garak/cli.py), which we bypass entirely by calling
+    # the Python API directly. Left as None, probe() crashes with
+    # AttributeError on the first attempt. We don't use garak's own JSONL
+    # report (results are extracted from `attempts` directly), so this is
+    # just a throwaway sink.
     results: list[GarakProbeResult] = []
-    for probe_name in probes:
-        # garak's Probe.probe()/Detector.detect() are synchronous (blocking
-        # HTTP/model calls under the hood) — run off the event loop.
-        result = await asyncio.to_thread(_run_one_probe, probe_name, generator, rng)
-        results.append(result)
-        logger.info("garak_probe_complete", probe=probe_name, passed=result.passed)
+    with open("/tmp/garak_report.jsonl", "w", buffering=1) as reportfile:
+        _config.reportfile = reportfile
+        for probe_name in probes:
+            # garak's Probe.probe()/Detector.detect() are synchronous (blocking
+            # HTTP/model calls under the hood) — run off the event loop.
+            result = await asyncio.to_thread(_run_one_probe, probe_name, generator, rng)
+            results.append(result)
+            logger.info("garak_probe_complete", probe=probe_name, passed=result.passed)
 
     logger.info("garak_complete", total=len(results))
     return results
