@@ -48,13 +48,18 @@ eval = [
 ]
 redteam = [
     "pyrit>=1.0.0",
-    # garak>=0.13.0 pins datasets<4.0, which conflicts with ragas==0.3.9's
-    # datasets>=4.0.0 and pyrit's datasets>=4.8.0 — pip's resolver backtracks
-    # through the entire Mako/alembic chain trying to reconcile them and
-    # eventually fails trying to build a pre-2to3-removal Mako release.
-    # 0.9.0-0.12.x all declare datasets>=X with no upper bound, so they
-    # resolve cleanly alongside ragas/pyrit.
-    "garak>=0.9.0,<0.13.0",
+    # Pinned to an exact version, not a range: garak>=0.13.0 pins
+    # datasets<4.0, which conflicts with ragas==0.3.9's datasets>=4.0.0 and
+    # pyrit's datasets>=4.8.0. A `<0.13.0` range doesn't avoid this either —
+    # 0.9.0.9 through 0.12.x add an exact avidtools==0.1.1.2/0.1.2 pin (and
+    # progressively narrower datasets/transformers pins), so pip still
+    # backtracks across every garak candidate in range trying to reconcile
+    # them all, eventually failing to build a pre-2to3-removal Mako release
+    # (see docs/known-limitations.md). 0.9.0.4 is the last release with no
+    # avidtools dependency and fully unbounded datasets>=2/transformers>=4.19
+    # pins, so it resolves cleanly with no backtracking — verified working
+    # end-to-end (full pytest + mypy pass) against this exact version.
+    "garak==0.9.0.4",
     "fairlearn>=0.10.0",
 ]
 dev = [

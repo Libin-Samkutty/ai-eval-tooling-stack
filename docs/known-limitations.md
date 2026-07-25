@@ -704,8 +704,21 @@ new enough to run on Python 3.11 (`error in Mako setup command: use_2to3 is
 invalid`) — a `Mako` build failure is the visible symptom, but the real
 cause is upstream in the `garak`/`ragas`/`pyrit` `datasets` conflict.
 
-**Mitigation**: pinned `garak>=0.9.0,<0.13.0` in `pyproject.toml`. Versions
-0.9.0 through 0.12.x all declare `datasets>=X` with no upper bound, so they
-resolve cleanly alongside `ragas`'s and `pyrit`'s floors. If `garak` is ever
-upgraded past 0.13.0, re-check its `datasets` pin against whatever `ragas`/
-`pyrit` require at that time before lifting this ceiling.
+A `garak>=0.9.0,<0.13.0` range does **not** fix this — it only narrows which
+candidates pip tries, it doesn't stop it trying them. 0.9.0.9 through 0.12.x
+each add an exact `avidtools==0.1.1.2`/`0.1.2` pin (plus progressively
+narrower `datasets`/`transformers` floors), so pip still backtracks across
+every garak release in that range hunting for one whose transitive pins
+line up with everything else, and can still bottom out on the same ancient
+`Mako` build failure.
+
+**Mitigation**: pinned the exact version `garak==0.9.0.4` in
+`pyproject.toml` — the last release with no `avidtools` dependency at all
+and fully unbounded `datasets>=2`/`transformers>=4.19` floors. An exact pin
+gives pip a single candidate for garak instead of a range to search, which
+removes the backtracking entirely rather than just shrinking it. Verified
+working end-to-end against this exact version: `mypy src/` clean across all
+21 source files and the full `pytest tests/` suite (22/22) passing. If
+`garak` is ever upgraded past `0.9.0.4`, re-check its `avidtools`/`datasets`/
+`transformers` pins against whatever `ragas`/`pyrit` require at that time —
+don't just widen the range again.
