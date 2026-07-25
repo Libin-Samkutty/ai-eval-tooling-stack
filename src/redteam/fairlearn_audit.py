@@ -89,7 +89,7 @@ async def classify_answer(
             {"role": "user", "content": CLASSIFY_PROMPT.format(question=question, answer=answer)}
         ],
     )
-    text = next(block.text for block in message.content if block.type == "text")
+    text: str = next(block.text for block in message.content if block.type == "text")
     return text.strip().upper().startswith("POSITIVE")
 
 
