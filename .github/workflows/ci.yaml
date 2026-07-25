@@ -17,6 +17,17 @@ jobs:
         with:
           python-version: "3.11"
 
+      # torch is a transitive dependency (pulled in by pyrit/deepeval/garak,
+      # not listed directly in pyproject.toml) and PyPI's default torch
+      # wheel drags in several GB of nvidia-cu13-*/cuda-toolkit/triton
+      # packages this CPU-only CI runner never uses. Installing the CPU-only
+      # build first means the later `.[all]` resolve finds torch's spec
+      # already satisfied and never reaches for the CUDA variant — same fix
+      # as Dockerfile.eval (see docs/known-limitations.md).
+      - name: Install CPU-only torch
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+
       - name: Install dependencies
         run: |
           pip install -e ".[all]"

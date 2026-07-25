@@ -722,3 +722,22 @@ working end-to-end against this exact version: `mypy src/` clean across all
 `garak` is ever upgraded past `0.9.0.4`, re-check its `avidtools`/`datasets`/
 `transformers` pins against whatever `ragas`/`pyrit` require at that time —
 don't just widen the range again.
+
+**Follow-up — pinning `garak` alone wasn't enough.** Even with
+`garak==0.9.0.4` exact, CI's `.[all]` install still backtracked for ~48
+minutes ("pip is looking at multiple versions of huggingface-hub" / "of
+datasets") before failing outright with `error: resolution-too-deep` — pip's
+resolver hit its own hard search-depth limit and gave up, rather than
+finding (or definitively ruling out) a solution. `datasets` and
+`huggingface-hub` aren't imported by our code at all — they're shared
+transitive deps of `ragas`, `pyrit`, `garak`, and `deepeval`, each pinning
+them with its own loose bound, so pip still had to search their combined
+version space even with garak fixed. Pinned `datasets==5.0.0`,
+`huggingface-hub==1.13.0`, and `transformers==5.13.0` (bundled in since it's
+tightly coupled to `huggingface-hub` and is a direct `garak` dependency) as
+exact versions in the `redteam` extra — verified compatible with
+`ragas==0.3.9`, `pyrit`, `garak==0.9.0.4`, and `deepeval` simultaneously via
+a clean `pip install --dry-run` (zero backtracking messages) plus the same
+full `mypy`/`pytest` pass. If any of these three ever need to move, check
+all four packages' pins against each other first — don't reintroduce an
+unbounded transitive dependency into this graph.

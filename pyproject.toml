@@ -61,6 +61,20 @@ redteam = [
     # end-to-end (full pytest + mypy pass) against this exact version.
     "garak==0.9.0.4",
     "fairlearn>=0.10.0",
+    # datasets/huggingface-hub/transformers aren't imported by our code —
+    # they're shared transitive deps of ragas, pyrit, garak, and deepeval,
+    # each with its own loosely-bounded constraint on them. Even with garak
+    # pinned exactly above, pip's resolver still had to search the combined
+    # version space of these three across every other package's bounds,
+    # and after ~48 minutes of backtracking hit its own hard search-depth
+    # limit (`error: resolution-too-deep`) without ever finding a solution —
+    # not merely slow, but pip giving up on the search itself. Pinning them
+    # to exact versions removes the search entirely. Verified compatible
+    # with ragas==0.3.9, pyrit, garak==0.9.0.4, and deepeval simultaneously
+    # (full pytest + mypy pass against this exact combination).
+    "datasets==5.0.0",
+    "huggingface-hub==1.13.0",
+    "transformers==5.13.0",
 ]
 dev = [
     "pytest>=8.3.0",
