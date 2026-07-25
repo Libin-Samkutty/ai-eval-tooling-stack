@@ -16,14 +16,14 @@ from anthropic import AnthropicVertex, AsyncAnthropicVertex
 from deepeval.models.base_model import DeepEvalBaseLLM
 
 
-class VertexClaudeModel(DeepEvalBaseLLM):  # type: ignore[misc]
+class VertexClaudeModel(DeepEvalBaseLLM):
     """DeepEval judge model backed by Claude on Vertex AI Model Garden."""
 
     def __init__(self, model_name: str, project: str, location: str) -> None:
         self.model_name = model_name
         self.project = project
         self.location = location
-        super().__init__(model_name)
+        super().__init__(model_name)  # type: ignore[no-untyped-call]
 
     def load_model(self, *args: Any, **kwargs: Any) -> Any:
         # Base class types this as -> "DeepEvalBaseLLM", but every real
@@ -41,8 +41,7 @@ class VertexClaudeModel(DeepEvalBaseLLM):  # type: ignore[misc]
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        text: str = next(block.text for block in message.content if block.type == "text")
-        return text
+        return next(block.text for block in message.content if block.type == "text")
 
     async def a_generate(self, prompt: str, schema: Any = None) -> str:
         client = AsyncAnthropicVertex(project_id=self.project, region=self.location)
@@ -51,8 +50,7 @@ class VertexClaudeModel(DeepEvalBaseLLM):  # type: ignore[misc]
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
-        text: str = next(block.text for block in message.content if block.type == "text")
-        return text
+        return next(block.text for block in message.content if block.type == "text")
 
     def get_model_name(self) -> str:
         return f"{self.model_name} (Vertex)"

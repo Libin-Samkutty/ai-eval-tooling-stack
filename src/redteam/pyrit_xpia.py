@@ -106,7 +106,7 @@ INJECTION_QUESTION = TrueFalseQuestion(
 # ── PyRIT targets ──────────────────────────────────────
 
 
-class ChromaPlantTarget(PromptTarget):  # type: ignore[misc]
+class ChromaPlantTarget(PromptTarget):
     """attack_setup_target — plants the attack message's text as a Chroma document."""
 
     def __init__(
@@ -151,7 +151,7 @@ class ChromaPlantTarget(PromptTarget):  # type: ignore[misc]
         logger.info("poisoned_chunk_removed", chunk_id=self._chunk_id)
 
 
-class ChatbotQueryTarget(PromptTarget):  # type: ignore[misc]
+class ChatbotQueryTarget(PromptTarget):
     """processing_target — sends the processing prompt's text to /query."""
 
     def __init__(self, *, chatbot_url: str) -> None:
@@ -177,7 +177,7 @@ class ChatbotQueryTarget(PromptTarget):  # type: ignore[misc]
         ]
 
 
-class ClaudeVertexJudgeTarget(PromptTarget):  # type: ignore[misc]
+class ClaudeVertexJudgeTarget(PromptTarget):
     """chat_target for SelfAskTrueFalseScorer — Claude Haiku on Vertex, kept
     separate from the Gemini generator to avoid self-grading bias."""
 
