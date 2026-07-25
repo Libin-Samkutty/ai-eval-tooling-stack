@@ -16,6 +16,7 @@ spec:
         component: pyrit
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: pyrit
           image: oss-ai-eval-jobs:latest

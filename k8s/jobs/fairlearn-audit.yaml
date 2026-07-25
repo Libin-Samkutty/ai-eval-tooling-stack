@@ -16,6 +16,7 @@ spec:
         component: fairlearn
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: fairlearn
           image: oss-ai-eval-jobs:latest

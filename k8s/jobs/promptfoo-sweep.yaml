@@ -17,6 +17,7 @@ spec:
         component: promptfoo
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: promptfoo
           image: oss-ai-eval-promptfoo:latest

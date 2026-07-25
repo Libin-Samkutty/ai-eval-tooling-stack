@@ -18,6 +18,7 @@ spec:
         component: deepeval
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: deepeval
           image: oss-ai-eval-jobs:latest

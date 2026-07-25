@@ -16,6 +16,7 @@ spec:
         component: garak
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: garak
           image: oss-ai-eval-jobs:latest
