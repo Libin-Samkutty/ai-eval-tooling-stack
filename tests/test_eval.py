@@ -68,6 +68,67 @@ def test_confidence_interval():
     assert result["n"] == 10
 
 
+# ── compare_eval_runs entrypoint ──────────────────────
+
+
+def test_compare_latest_runs_errors_when_fewer_than_two_runs():
+    """Fewer than 2 runs for a framework logs an error and does not compare."""
+    from unittest.mock import MagicMock, patch
+
+    from scripts.compare_eval_runs import compare_latest_runs
+
+    with (
+        patch("scripts.compare_eval_runs.MlflowClient") as mock_client_cls,
+        patch("scripts.compare_eval_runs.compare_runs") as mock_compare,
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.get_experiment_by_name.return_value = MagicMock(experiment_id="0")
+        mock_client.search_runs.return_value = [MagicMock()]
+
+        compare_latest_runs("ragas", "faithfulness", "oss-ai-eval-stack", "http://localhost:5000")
+
+    mock_compare.assert_not_called()
+
+
+def test_compare_latest_runs_compares_older_against_newer():
+    """The two most recent runs are compared with the older run as the baseline."""
+    from unittest.mock import MagicMock, patch
+
+    from scripts.compare_eval_runs import compare_latest_runs
+
+    newer_run = MagicMock(info=MagicMock(run_id="run-newer"))
+    older_run = MagicMock(info=MagicMock(run_id="run-older"))
+    values_by_run = {"run-newer": [0.8, 0.82], "run-older": [0.7, 0.72]}
+
+    with (
+        patch("scripts.compare_eval_runs.MlflowClient") as mock_client_cls,
+        patch(
+            "scripts.compare_eval_runs._load_metric_values",
+            side_effect=lambda client, run_id, artifact_file, metric: values_by_run[run_id],
+        ),
+        patch("scripts.compare_eval_runs.compare_runs") as mock_compare,
+    ):
+        mock_client = mock_client_cls.return_value
+        mock_client.get_experiment_by_name.return_value = MagicMock(experiment_id="0")
+        mock_client.search_runs.return_value = [newer_run, older_run]
+
+        compare_latest_runs("ragas", "faithfulness", "oss-ai-eval-stack", "http://localhost:5000")
+
+    mock_compare.assert_called_once_with([0.7, 0.72], [0.8, 0.82], "faithfulness")
+
+
+def test_compare_latest_runs_rejects_unknown_framework():
+    """An unsupported framework raises before touching MLflow."""
+    import pytest
+
+    from scripts.compare_eval_runs import compare_latest_runs
+
+    with pytest.raises(ValueError):
+        compare_latest_runs(
+            "not-a-framework", "faithfulness", "oss-ai-eval-stack", "http://localhost:5000"
+        )
+
+
 # ── Red team ──────────────────────────────────────────
 
 

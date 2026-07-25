@@ -124,6 +124,9 @@ eval-safety: safety-pyrit safety-garak safety-fairlearn ## Run full safety cycle
 eval-safety-wait: eval-safety ## Run safety cycle and block until its Jobs finish (success or failure)
 	kubectl wait --for=condition=complete --timeout=45m job/pyrit-xpia job/garak-probe job/fairlearn-audit
 
+compare-runs: ## Compare the two most recent MLflow runs for a metric (usage: make compare-runs FRAMEWORK=ragas METRIC=faithfulness)
+	python scripts/compare_eval_runs.py --framework $(FRAMEWORK) --metric $(METRIC)
+
 # ── Dev ────────────────────────────────────────────────
 
 test: ## Run tests

@@ -45,9 +45,9 @@ layer (Vertex AI: Gemini + Claude).
 | **Guardrails** | Guardrails AI | In-process, not a separate microservice |
 | **Red-Teaming** | PyRIT (XPIA), Garak (direct injection) | Both cover different attack surfaces |
 | **Fairness** | Fairlearn | Batch job, documented limitations for text generation |
-| **Stats** | scipy / statsmodels | Confidence intervals across MLflow-logged runs |
+| **Stats** | scipy / statsmodels | Confidence intervals across MLflow-logged runs — `make compare-runs FRAMEWORK=... METRIC=...` |
 | **Orchestration** | Kubernetes (`kind`) | 3 standing Deployments, ephemeral Jobs/CronJobs; runs locally or in a [GitHub Codespace](#prerequisites) |
-| **CI** | GitHub Actions | Build/push images only |
+| **CI** | GitHub Actions | Lint, type-check (blocking), test, then build all 5 images as a verification gate — no registry push |
 
 ### Five Docker Images, Not One
 
@@ -399,6 +399,7 @@ See [docs/known-limitations.md](./docs/known-limitations.md) for full details.
 | 4 | ~~Lock golden dataset schema before Phase 3 completes~~ — resolved: schema locked, see `data/golden_dataset.json` and the schema block in `PLAN.md`/`CLAUDE.md` | Done |
 | 5 | ~~Define PyRIT XPIA attack loop interface to `/query` endpoint~~ — resolved: `ChatbotQueryTarget`/`ChromaPlantTarget` (real `PromptTarget` subclasses) in `src/redteam/pyrit_xpia.py`, driven by `pyrit.executor.workflow.xpia.XPIATestWorkflow` | Done |
 | 6 | ~~Verify `gemini-1.5-flash` still resolves on Vertex~~ — resolved 2026-07: it and every `gemini-2.0-*` variant 404; switched default to `gemini-2.5-flash` (confirmed available, see Known Limitations) | Done |
+| 7 | ~~CI's "build/push images" scope~~ — resolved: build-only, no registry push (nothing in the project ever pulls from one — Jobs/Deployments load images via `kind load docker-image`); `mypy` is now a blocking CI step since `src/` is clean | Done |
 
 `.env.example` and `data/golden_dataset.json` still show the retired
 `claude-3-haiku@20240307` string in example/sample content only — the actual
