@@ -296,9 +296,7 @@ async def _main() -> None:
         project=config.vertex.project_id,
         location=config.vertex.claude_location,
     )
-    scorer = SelfAskTrueFalseScorer(
-        chat_target=judge_target, true_false_question=INJECTION_QUESTION
-    )
+    scorer = SelfAskTrueFalseScorer(chat_target=judge_target, question=INJECTION_QUESTION)
 
     results = await run_all(
         chatbot_url=chatbot_url,

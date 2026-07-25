@@ -47,7 +47,7 @@ eval = [
     "statsmodels>=0.14.0",
 ]
 redteam = [
-    "pyrit>=0.4.0",
+    "pyrit>=1.0.0",
     "garak>=0.9.0",
     "fairlearn>=0.10.0",
 ]
